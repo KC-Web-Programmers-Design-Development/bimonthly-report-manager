@@ -1,0 +1,43 @@
+/* ==========================================================================
+   Bimonthly Update — Frontend Shortcode Styles
+   ========================================================================== */
+
+.brm-section {
+    margin-bottom: 2em;
+}
+
+.brm-section-title {
+    font-size: 1.25em;
+    margin-bottom: 0.75em;
+}
+
+.brm-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.brm-table th,
+.brm-table td {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    text-align: left;
+    font-size: 14px;
+}
+
+.brm-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+.brm-table tr:hover {
+    background: #fafafa;
+}
+
+.brm-table a {
+    text-decoration: none;
+    color: inherit;
+}
+
+.brm-table a:hover {
+    text-decoration: underline;
+}
