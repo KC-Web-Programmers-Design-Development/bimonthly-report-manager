@@ -5,8 +5,8 @@ Generates branded narrative-style PDF exports.
 
 Usage: python3 generate-pdf.py <input.json> <output.pdf>
 
-Admin cover:    ATTC Logo centered
-Center cover:   ATTC Logo + "[Center Name] – Bi-Monthly Update" below
+Admin cover:    Network Logo centered
+Center cover:   Network Logo + "[Center Name] – Bi-Monthly Update" below
 
 Body is narrative-style (not tabular).
 """

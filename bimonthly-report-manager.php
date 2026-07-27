@@ -801,7 +801,7 @@ class BimonthlyReportManager {
             'logo_path' => $logo_path, 'updates' => $updates,
             'show_type' => $show_type, 'show_author' => $show_author, 'show_date' => $show_date,
         );
-        $this->run_pdf_generator($payload, 'PTTC-Network-Meta-Report-' . date('Y-m-d') . '.pdf');
+        $this->run_pdf_generator($payload, 'Network-Meta-Report-' . date('Y-m-d') . '.pdf');
     }
 
     /**
