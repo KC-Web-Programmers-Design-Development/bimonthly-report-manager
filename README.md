@@ -1,46 +1,141 @@
 # Bimonthly Report Manager
 
-A WordPress plugin for managing bimonthly network updates: editors select past and upcoming activity from existing content, tag it to workplan outputs, and export the result as a branded PDF — either per-group or as a combined "meta report" across all groups.
+**Version:** 2.3.6
+**Author:** KC Web Programmers
+**Text domain:** `bimonthly-report-manager`
 
-- **Version:** 2.1.0
-- **Author:** KC Web Programmers
-- **Text Domain:** `bimonthly-report-manager`
+A WordPress plugin for building and exporting bimonthly updates. Each update has two sections, **Past Highlights** and **Future Highlights**. Editors fill them by picking existing site content (news, events, products and resources, and bimonthly highlights) and linking it to workplan outputs. Updates can be exported as branded narrative-style PDFs, individually or combined into a network-wide Meta Report.
 
 ## Features
 
-- **Bimonthly update posts** — custom `bimonthly` post type, one per group/reporting period, holding a "Past Highlights" and "Future Highlights" section (max 3 items each).
-- **Date-filtered post selection** — pulls candidate items from `news`, `event`, `products_and_resourc`, and `bimonthly-highlight` post types, filtered to a configurable window (2 or 3 months) before/after the current date.
-- **Cascading workplan tagging** — each selected item can be linked to a Workplan → Goal → Objective → Output chain via ACF relationship fields, drilled down through AJAX calls.
-- **Inline highlight creation** — create a new `bimonthly-highlight` post directly from the item picker without leaving the page.
-- **AI-generated summaries** — if no manual summary exists, content is sent to OpenAI (`gpt-4o-mini`) to generate a sub-100-word summary, cached back onto the source post (`internal_reporting_summary` field).
-- **Group/region-based permissions** — a custom `edit_bimonthly_updates` capability, plus a group → editor role → region number mapping (configured in Settings), restricts which updates a given editor can see and edit, and orders the meta report by region.
-- **PDF export** — per-update and combined "meta report" exports rendered by a Python (`reportlab`) generator (`includes/generate-pdf.py`), invoked via `shell_exec`, with an uploadable cover logo.
-- **Meta report preview** — HTML preview of the combined report (grouped by center/region, with optional type/author/date metadata) before export.
-- **Frontend shortcode** — `[bimonthly_report id="123"]` renders a given update's Past/Future Highlights tables on the front end.
+- **Update manager** with a sidebar list of updates and an editor for Past and Future highlights.
+- **Period-based date windows.** Choose a reporting period and year, and the post picker only offers content from the matching date ranges (see [Reporting periods](#reporting-periods)).
+- **Cascading workplan selection.** Link each item to a workplan, goal, objective and output.
+- **Summary editing.** Edit the internal reporting summary for an item directly in the editor.
+- **Group-based access.** Map WordPress roles to `group` taxonomy terms so each center only sees its own updates.
+- **PDF export** for a single update, with a configurable cover page.
+- **Meta Report** that combines selected updates from multiple groups into one PDF, ordered by region.
+- **Workplan connections metabox** on post edit screens, showing which updates reference that post (read-only).
+- **Shortcode** `[bimonthly_report]` to display an update's highlights as tables on the front end.
 
 ## Requirements
 
-- WordPress with **Advanced Custom Fields (ACF)** — used for relationship fields (`related_work_plan_goals`, `work_plan_objectives`, `objective_outputs`, etc.) and post meta (falls back to plain post meta if ACF is inactive).
-- Custom post types expected to already be registered elsewhere (theme or another plugin): `bimonthly`, `bimonthly-highlight`, `workplan`, `goal`, `objective`, `news`, `event`, `products_and_resourc`.
-- A `group` taxonomy, used for access control and report region ordering.
-- **Python 3** with the `reportlab` package installed and reachable on the server (`python3`/`/usr/bin/python3`), required for PDF export.
-- An OpenAI API key stored in the `chatgpt_api_key` WordPress option (no in-plugin settings field for this yet — set via `wp option update chatgpt_api_key "sk-..."` or another settings mechanism) to enable AI summaries. Without it, summaries are simply left blank.
+| Requirement | Notes |
+|---|---|
+| WordPress | A recent 6.x release is recommended. |
+| Advanced Custom Fields | The plugin calls `get_field()` for event, publication and highlight dates. |
+| Post types | `bimonthly`, `news`, `event`, `products_and_resourc`, `bimonthly-highlight` |
+| Taxonomy | `group` |
+| Capability `edit_others_workplans` | Treated as "network admin". Provided by your workplan setup, not by this plugin. |
+| Python 3 with [ReportLab](https://pypi.org/project/reportlab/) | Required for PDF export. Must be installed on the server. |
+| PHP `shell_exec` | Must be enabled. PDF generation runs `includes/generate-pdf.py` through the shell. |
 
-## Setup
+The custom post types, taxonomy and workplan data are expected to be registered by the site's theme or other plugins.
 
-1. Install and activate the plugin. Activation grants the `edit_bimonthly_updates` capability to Administrators automatically.
-2. Go to **Bimonthly Updates → Settings**:
-   - Map each `group` taxonomy term to an editor role and a region number, then click **Apply Capabilities to Roles** to grant `edit_bimonthly_updates` to the mapped roles.
-   - Set the prior/ahead date window (2 or 3 months).
-   - Upload a logo for the PDF cover page.
-3. (Optional) Set the `chatgpt_api_key` option to enable AI-generated summaries.
+## Installation
+
+1. Copy the `bimonthly-report-manager` folder to `wp-content/plugins/`, or upload the zip under **Plugins → Add New → Upload Plugin**.
+2. Activate the plugin. Activation grants the `edit_bimonthly_updates` capability to Administrators.
+3. Install ReportLab for the server's Python 3 (`pip3 install reportlab`).
+4. Go to **Bimonthly Updates → Settings**:
+   - Map each group to a role (and region, for Meta Report ordering).
+   - Click **Apply Capabilities** to grant `edit_bimonthly_updates` to the mapped roles.
+   - Set the PDF cover page logo and network title.
+
+> **Deactivation** removes `edit_bimonthly_updates` from every role. Re-run **Apply Capabilities** after reactivating to restore access for non-admin roles.
 
 ## Usage
 
-- **Bimonthly Updates** (admin menu) — create/select an update, pick items for Past and Future Highlights, tag workplan outputs, and export a PDF.
-- **Meta Report** (submenu, requires `edit_others_workplans`) — select multiple updates across groups, preview, and export a combined, region-ordered PDF.
-- **`[bimonthly_report id="123"]`** shortcode — display a published update's highlights on any page or post.
+### Creating an update
+1. Open **Bimonthly Updates** in the admin menu.
+2. Click **+ New Update**, then choose a group, reporting period and year.
+3. In the editor, add items under **Past Highlights** and **Future Highlights**. The picker is filtered to the date window for that direction.
+4. Edit summaries as needed. Items are saved automatically as you work.
+5. Use the **✎** button beside the period chip to change the period or year. The editor opens with the current values selected.
 
-## Version History
+### Reporting periods
 
-- **2.1.0** — current version (no prior changelog recorded).
+Each period pivots between its two months. **Past** covers the month before the period plus its first month. **Future** covers its second month plus the month after.
+
+| Period | Past highlights | Future highlights |
+|---|---|---|
+| Jan – Feb | Dec – Jan | Feb – Mar |
+| Mar – Apr | Feb – Mar | Apr – May |
+| May – Jun | Apr – May | Jun – Jul |
+| Jul – Aug | Jun – Jul | Aug – Sep |
+| Sep – Oct | Aug – Sep | Oct – Nov |
+| Nov – Dec | Oct – Nov | Dec – Jan |
+
+Year boundaries are handled automatically. For example, Jan – Feb 2027 gives Past: Dec 1, 2026 – Jan 31, 2027 and Future: Feb 1 – Mar 31, 2027.
+
+Updates created without a period fall back to a rolling two-month window around today's date.
+
+### Exporting
+- **Single update:** use the export button in the update editor.
+- **Meta Report:** go to **Bimonthly Updates → Meta Report**, select updates, preview, and export one combined PDF. This page requires `edit_others_workplans`.
+
+### Shortcode
+
+```
+[bimonthly_report id="123"]
+```
+
+Renders **Past Highlights** and **Future Highlights** tables for the given `bimonthly` post. If `id` is omitted, the current post is used. Front-end styles load from `css/bimonthly-frontend.css`.
+
+## Permissions
+
+| Capability | Used for |
+|---|---|
+| `edit_bimonthly_updates` | Access to the Bimonthly Updates screen, and creating updates and highlights. |
+| `edit_others_workplans` | Network-wide access (all groups), the Meta Report page and PDF export. |
+| `manage_options` | Settings page, group/role configuration and applying capabilities. |
+
+Users without `edit_others_workplans` are limited to updates tagged with a `group` term mapped to one of their roles.
+
+## File structure
+
+```
+bimonthly-report-manager/
+├── bimonthly-report-manager.php   # Main plugin class, AJAX handlers, shortcode, metabox
+├── Changelog.md
+├── README.md
+├── css/
+│   ├── bimonthly-report-manager.css   # Admin styles
+│   └── bimonthly-frontend.css         # Shortcode styles
+├── includes/
+│   ├── admin-page.php        # Main update manager UI
+│   ├── settings-page.php     # Group/role config and PDF cover settings
+│   ├── meta-report-page.php  # Meta Report generator UI
+│   └── generate-pdf.py       # ReportLab PDF generator
+└── js/
+    └── bimonthly-report-manager.js    # Admin UI logic
+```
+
+## Data storage
+
+No custom tables. Each update is a `bimonthly` post with this meta:
+
+| Meta key | Contents |
+|---|---|
+| `_brm_period` | Period key (`jan-feb`, `mar-apr`, `may-jun`, `jul-aug`, `sep-oct`, `nov-dec`) |
+| `_brm_year` | Four-digit year |
+| `_brm_prior_items` | JSON list of Past Highlight items |
+| `_brm_ahead_items` | JSON list of Future Highlight items |
+
+Plugin settings are stored in the `brm_group_config` option and the PDF cover settings.
+
+## Upgrading to 2.3.6
+
+- No database changes. Existing updates pick up the new date windows automatically, because only the period key is stored.
+- Items saved under the old windows still display and export, but may not appear in the post picker when you edit the update.
+- Clear any caching plugin or CDN and hard-refresh the Bimonthly Updates page after deploying.
+
+See [Changelog.md](Changelog.md) for details.
+
+## Known issues
+
+- Group names containing `&` display as `&amp;` in the sidebar.
+
+## License
+
+Proprietary. Developed by KC Web Programmers for client use. *(Update this section if you publish under an open-source license.)*
