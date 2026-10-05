@@ -18,6 +18,26 @@
                 <div class="brm-editor-header">
                     <h2 id="brm-report-title"></h2>
                     <span id="brm-report-group" class="brm-badge"></span>
+                    <span id="brm-report-period" class="brm-badge brm-badge-period"></span>
+                    <button type="button" id="brm-edit-period" class="button button-small" title="Edit period">✎</button>
+                    <div id="brm-period-editor" style="display:none;">
+                         <select id="brm-edit-period-select">
+                            <option value="">— Period —</option>
+                            <?php foreach (BimonthlyReportManager::get_periods() as $key => $p) : ?>
+                                <option value="<?php echo esc_attr($key); ?>"><?php echo esc_html($p['short'] . ' (' . $p['span'] . ')'); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <select id="brm-edit-year-select">
+                            <?php
+                            $cy = intval(date('Y'));
+                            for ($y = $cy + 1; $y >= $cy - 3; $y--) {
+                                printf('<option value="%d">%d</option>', $y, $y);
+                            }
+                            ?>
+                        </select>
+                        <button type="button" id="brm-save-period" class="button button-primary button-small">Save</button>
+                        <button type="button" id="brm-cancel-period" class="button button-small">Cancel</button>
+                    </div>
                     <div class="brm-editor-actions">
                         <button id="brm-export-pdf" class="button button-secondary">Export PDF</button>
                         <button id="brm-delete-report" class="button button-link-delete">Delete Update</button>
@@ -28,7 +48,7 @@
 
                 <?php foreach (array('prior' => 'Past Highlights', 'ahead' => 'Future Highlights') as $dir => $label) : ?>
                 <div class="brm-section-editor" data-direction="<?php echo $dir; ?>">
-                    <h3><?php echo $label; ?></h3>
+                    <h3><?php echo $label; ?> <span class="brm-date-range-label" id="brm-range-<?php echo $dir; ?>"></span></h3>
                     <table class="widefat brm-items-table">
                         <thead><tr><th>Type</th><th>Title</th><th>Author</th><th>Date</th><th>Summary</th><th>Associated Workplan Outputs</th><th width="40"></th></tr></thead>
                         <tbody id="brm-<?php echo $dir; ?>-items"><tr class="brm-empty-row"><td colspan="7">No items yet.</td></tr></tbody>
@@ -137,7 +157,30 @@
             <div class="brm-modal-body">
                 <div class="brm-field-row">
                     <label for="brm-new-title">Update Title</label>
-                    <input type="text" id="brm-new-title" placeholder="e.g. March–April 2026 Update">
+                    <input type="text" id="brm-new-title" placeholder="e.g. January–February 2026">
+                </div>
+                <div class="brm-field-row brm-field-row-inline">
+                    <div>
+                        <label for="brm-new-period">Reporting Period</label>
+                        <select id="brm-new-period">
+                            <option value="">— Select period —</option>
+                            <?php foreach (BimonthlyReportManager::get_periods() as $key => $p) : ?>
+                                <option value="<?php echo esc_attr($key); ?>"><?php echo esc_html($p['label'] . ' (' . $p['span'] . ')'); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="brm-new-year">Year</label>
+                        <select id="brm-new-year">
+                            <?php
+                            $current_year = intval(date('Y'));
+                            for ($y = $current_year + 1; $y >= $current_year - 3; $y--) {
+                                $sel = ($y === $current_year) ? ' selected' : '';
+                                printf('<option value="%d"%s>%d</option>', $y, $sel, $y);
+                            }
+                            ?>
+                        </select>
+                    </div>
                 </div>
                 <div class="brm-field-row">
                     <label for="brm-new-group">Group</label>

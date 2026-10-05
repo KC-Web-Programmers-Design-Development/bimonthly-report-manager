@@ -202,6 +202,48 @@
     margin-top: 5px;
 }
 
+.brm-badge-period {
+    background: #fef3e2;
+    color: #9a6700;
+}
+
+#brm-period-editor {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#brm-period-editor select {
+    height: 28px;
+    font-size: 12px;
+}
+
+#brm-edit-period {
+    padding: 0 5px !important;
+    font-size: 13px;
+    line-height: 24px;
+    min-height: 24px;
+}
+
+.brm-date-range-label {
+    font-size: 12px;
+    font-weight: normal;
+    color: #888;
+}
+
+.brm-field-row-inline {
+    display: flex;
+    gap: 12px;
+}
+
+.brm-field-row-inline > div {
+    flex: 1;
+}
+
+.brm-field-row-inline select {
+    width: 100%;
+}
+
 /* Modal overlay */
 #brm-modal-overlay,
 #brm-new-modal-overlay {

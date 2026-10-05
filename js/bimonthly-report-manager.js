@@ -25,6 +25,11 @@
             $('#brm-delete-report').on('click', function() { self.deleteReport(); });
             $('#brm-export-pdf').on('click', function() { self.exportPdf(); });
 
+            // Period editing
+            $('#brm-edit-period').on('click', function() { self.showPeriodEditor(); });
+            $('#brm-cancel-period').on('click', function() { self.hidePeriodEditor(); });
+            $('#brm-save-period').on('click', function() { self.savePeriod(); });
+
             $(document).on('click', '.brm-add-item', function() {
                 self.currentDirection = $(this).data('direction');
                 var currentItems = (self.currentDirection === 'prior') ? self.priorItems : self.aheadItems;
@@ -89,7 +94,9 @@
             var $list = $('#brm-report-list').empty();
             if (reports.length === 0) { $list.html('<p class="brm-empty">No updates found.</p>'); return; }
             reports.forEach(function(r) {
-                $list.append('<div class="brm-report-item' + (r.id === BRM.currentReportId ? ' active' : '') + '" data-id="' + r.id + '"><strong>' + BRM.esc(r.title) + '</strong><span class="brm-meta">' + BRM.esc(r.group) + ' · ' + BRM.esc(r.date) + '</span></div>');
+                var meta = BRM.esc(r.group) + ' · ' + BRM.esc(r.date);
+                if (r.period) meta = BRM.esc(r.period) + ' · ' + BRM.esc(r.group);
+                $list.append('<div class="brm-report-item' + (r.id === BRM.currentReportId ? ' active' : '') + '" data-id="' + r.id + '"><strong>' + BRM.esc(r.title) + '</strong><span class="brm-meta">' + meta + '</span></div>');
             });
         },
 
@@ -114,6 +121,20 @@
         renderReport: function(data) {
             $('#brm-report-title').text(data.title);
             $('#brm-report-group').text(data.groups.map(function(g) { return g.name; }).join(', ') || 'No group');
+
+            // Display period info
+            this.hidePeriodEditor(); // reset editor state
+			this.currentPeriod = data.period || null;
+            if (data.period) {
+                $('#brm-report-period').text(data.period.span_label).show();
+                $('#brm-range-prior').text('(' + data.period.prior_label + ')');
+                $('#brm-range-ahead').text('(' + data.period.ahead_label + ')');
+            } else {
+                $('#brm-report-period').text('No period set').show();
+                $('#brm-range-prior, #brm-range-ahead').text('');
+            }
+            $('#brm-edit-period').show();
+
             this.priorItems = data.prior_items;
             this.aheadItems = data.ahead_items;
             this.renderItems('prior', data.prior_items);
@@ -122,6 +143,15 @@
 
         renderItems: function(direction, items) {
             var $tbody = $('#brm-' + direction + '-items').empty();
+
+            // Update button state first — before any early return
+            var $addBtn = $tbody.closest('.brm-section-editor').find('.brm-add-item');
+            if (items.length >= 3) {
+                $addBtn.prop('disabled', true).text('Limit reached (3 items)');
+            } else {
+                $addBtn.prop('disabled', false).text('+ Add Item');
+            }
+
             if (items.length === 0) { $tbody.html('<tr class="brm-empty-row"><td colspan="7">No items yet.</td></tr>'); return; }
 
             var self = this;
@@ -170,27 +200,26 @@
 
                 $tbody.append($row);
             });
-
-            // Disable/enable the Add Item button based on 3-item limit
-            var $addBtn = $tbody.closest('.brm-section-editor').find('.brm-add-item');
-            if (items.length >= 3) {
-                $addBtn.prop('disabled', true).text('Limit reached (3 items)');
-            } else {
-                $addBtn.prop('disabled', false).text('+ Add Item');
-            }
         },
 
         // =====================================================================
         // New / Delete update
         // =====================================================================
 
-        showNewModal: function() { $('#brm-new-title').val(''); $('#brm-new-group').val(''); $('#brm-new-modal-overlay').show(); },
+        showNewModal: function() { $('#brm-new-title').val(''); $('#brm-new-group').val(''); $('#brm-new-period').val(''); $('#brm-new-modal-overlay').show(); },
         hideNewModal: function() { $('#brm-new-modal-overlay').hide(); },
 
         createReport: function() {
             var self = this, title = $('#brm-new-title').val().trim();
+            var period = $('#brm-new-period').val();
+            var year = $('#brm-new-year').val();
             if (!title) { alert('Please enter a title.'); return; }
-            $.post(brm_ajax.ajax_url, { action: 'brm_create_bimonthly', nonce: brm_ajax.nonce, title: title, group: $('#brm-new-group').val() }, function(res) {
+            if (!period) { alert('Please select a reporting period.'); return; }
+            $.post(brm_ajax.ajax_url, {
+                action: 'brm_create_bimonthly', nonce: brm_ajax.nonce,
+                title: title, group: $('#brm-new-group').val(),
+                period: period, year: year
+            }, function(res) {
                 if (res.success) { self.hideNewModal(); self.loadReportList(); self.loadReport(res.data.id); }
                 else alert('Error: ' + (res.data || ''));
             });
@@ -208,6 +237,78 @@
         exportPdf: function() {
             if (!this.currentReportId) return;
             window.open(brm_ajax.ajax_url + '?action=brm_export_pdf&post_id=' + this.currentReportId + '&nonce=' + brm_ajax.nonce, '_blank');
+        },
+
+        // =====================================================================
+        // Period editing
+        // =====================================================================
+
+        showPeriodEditor: function() {
+            // Pre-select current values from the badge text
+            var $periodBadge = $('#brm-report-period');
+            var text = $periodBadge.text(); // e.g. "January – February 2026"
+
+            // Try to detect current period/year from stored data
+            // We'll read from the last loaded report data
+            var $editPeriod = $('#brm-edit-period-select');
+            var $editYear = $('#brm-edit-year-select');
+
+            // Reset
+                       if (this.currentPeriod) {
+                $editPeriod.val(this.currentPeriod.period_key);
+                $editYear.val(this.currentPeriod.year);
+            } else {
+                $editPeriod.val('');
+                $editYear.val(new Date().getFullYear());
+            }
+            // Show editor, hide badge and edit button
+            $periodBadge.hide();
+            $('#brm-edit-period').hide();
+            $('#brm-period-editor').show();
+        },
+
+        hidePeriodEditor: function() {
+            $('#brm-period-editor').hide();
+            $('#brm-report-period').show();
+            $('#brm-edit-period').show();
+        },
+
+        savePeriod: function() {
+            var self = this;
+            var period = $('#brm-edit-period-select').val();
+            var year = $('#brm-edit-year-select').val();
+
+            if (!period) { alert('Please select a period.'); return; }
+
+            $('#brm-save-period').prop('disabled', true).text('Saving…');
+
+            $.post(brm_ajax.ajax_url, {
+                action: 'brm_save_period',
+                nonce: brm_ajax.nonce,
+                post_id: this.currentReportId,
+                period: period,
+                year: year
+            }, function(res) {
+                $('#brm-save-period').prop('disabled', false).text('Save');
+                if (res.success) {
+                    self.hidePeriodEditor();
+
+                    // Update the display
+                    var p = res.data.period;
+                    if (p) {
+						self.currentPeriod = p;
+                        $('#brm-report-period').text(p.span_label).show();
+                        $('#brm-range-prior').text('(' + p.prior_label + ')');
+                        $('#brm-range-ahead').text('(' + p.ahead_label + ')');
+						
+                    }
+
+                    // Refresh the sidebar list to reflect updated period
+                    self.loadReportList();
+                } else {
+                    alert('Error: ' + (res.data || ''));
+                }
+            });
         },
 
         // =====================================================================

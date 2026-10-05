@@ -4,7 +4,6 @@ if (!defined('ABSPATH')) exit;
 $settings = get_option('brm_pdf_settings', array());
 $logo_id  = isset($settings['logo_attachment_id']) ? intval($settings['logo_attachment_id']) : 0;
 $logo_url = isset($settings['logo_url']) ? $settings['logo_url'] : '';
-$timespan = isset($settings['timespan_months']) ? intval($settings['timespan_months']) : 3;
 $network_title = get_bloginfo('name');
 
 // Get current group config
@@ -30,7 +29,7 @@ asort($editor_roles);
     <!-- Group & Role Configuration                   -->
     <!-- ============================================ -->
     <h2 class="title">Group &amp; Role Configuration</h2>
-    <p class="description">Map each group to an editor role and assign a region number for report ordering. Only roles with a group assignment will have access to the Bimonthly Updates page.</p>
+    <p class="description">Map each group to an editor role and assign a region number for report ordering. Groups with no assigned role are accessible only to administrators.</p>
 
     <table class="widefat brm-group-config-table" id="brm-group-config-table">
         <thead>
@@ -74,25 +73,6 @@ asort($editor_roles);
         <span id="brm-caps-applied" class="brm-save-notice" style="display:none;">Capabilities applied.</span>
     </p>
     <p class="description">After saving, click "Apply Capabilities to Roles" to grant the <code>edit_bimonthly_updates</code> capability to mapped roles (and remove it from unmapped ones).</p>
-
-    <hr>
-
-    <!-- ============================================ -->
-    <!-- General Settings                              -->
-    <!-- ============================================ -->
-    <h2 class="title">General</h2>
-    <table class="form-table">
-        <tr>
-            <th scope="row"><label for="brm-timespan">Date Range</label></th>
-            <td>
-                <select id="brm-timespan">
-                    <option value="2" <?php selected($timespan, 2); ?>>2 months</option>
-                    <option value="3" <?php selected($timespan, 3); ?>>3 months</option>
-                </select>
-                <p class="description">How far back (prior) and ahead (future) to look when filtering posts for selection.</p>
-            </td>
-        </tr>
-    </table>
 
     <hr>
 
@@ -226,8 +206,7 @@ asort($editor_roles);
             action: 'brm_save_settings',
             nonce: nonce,
             logo_attachment_id: $('#brm-logo-attachment-id').val(),
-            logo_url: $('#brm-logo-url').val(),
-            timespan_months: $('#brm-timespan').val()
+            logo_url: $('#brm-logo-url').val()
         }, function(res) {
             $btn.prop('disabled', false).text('Save PDF Settings');
             if (res.success) {

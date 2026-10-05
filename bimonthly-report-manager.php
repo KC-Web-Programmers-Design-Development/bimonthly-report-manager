@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Bimonthly Report Manager
  * Description: Manage bimonthly updates with cascading workplan output selection and date-filtered post selection
- * Version: 2.1.0
+ * Version: 2.3.6
  * Author: KC Web Programmers
  * Text Domain: bimonthly-report-manager
  */
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) exit;
 
 define('BRM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BRM_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('BRM_VERSION', '2.1.0');
+define('BRM_VERSION', '2.3.6');
 
 /**
  * On activation, grant 'edit_bimonthly_updates' to administrator.
@@ -49,7 +49,7 @@ class BimonthlyReportManager {
             'brm_create_bimonthly', 'brm_delete_bimonthly', 'brm_create_highlight',
             'brm_export_pdf', 'brm_save_settings', 'brm_save_summary',
             'brm_get_all_updates_for_meta', 'brm_export_meta_pdf', 'brm_get_meta_preview',
-            'brm_save_group_config', 'brm_apply_capabilities',
+            'brm_save_group_config', 'brm_apply_capabilities', 'brm_save_period',
         );
         foreach ($ajax_actions as $action) {
             $method = 'ajax_' . str_replace('brm_', '', $action);
@@ -58,6 +58,7 @@ class BimonthlyReportManager {
 
         add_shortcode('bimonthly_report', array($this, 'render_shortcode'));
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_styles'));
+        add_action('add_meta_boxes', array($this, 'register_connection_metabox'));
     }
 
     public function add_admin_menu() {
@@ -261,6 +262,78 @@ class BimonthlyReportManager {
     }
 
     // =========================================================================
+    // Bimonthly period helpers
+    // =========================================================================
+
+    private static $periods = array(
+        'jan-feb' => array('label' => 'January – February',  'short' => 'Jan – Feb', 'span' => 'Past: Dec–Jan · Future: Feb–Mar', 'start_month' => 1,  'end_month' => 2),
+        'mar-apr' => array('label' => 'March – April',        'short' => 'Mar – Apr', 'span' => 'Past: Feb–Mar · Future: Apr–May', 'start_month' => 3,  'end_month' => 4),
+        'may-jun' => array('label' => 'May – June',           'short' => 'May – Jun', 'span' => 'Past: Apr–May · Future: Jun–Jul', 'start_month' => 5,  'end_month' => 6),
+        'jul-aug' => array('label' => 'July – August',        'short' => 'Jul – Aug', 'span' => 'Past: Jun–Jul · Future: Aug–Sep', 'start_month' => 7,  'end_month' => 8),
+        'sep-oct' => array('label' => 'September – October',  'short' => 'Sep – Oct', 'span' => 'Past: Aug–Sep · Future: Oct–Nov', 'start_month' => 9,  'end_month' => 10),
+        'nov-dec' => array('label' => 'November – December',  'short' => 'Nov – Dec', 'span' => 'Past: Oct–Nov · Future: Dec–Jan', 'start_month' => 11, 'end_month' => 12),
+    );
+
+    /** Public access for templates (admin-page.php builds its dropdowns from this). */
+    public static function get_periods() {
+        return self::$periods;
+    }
+
+      /**
+     * Get the date ranges for a bimonthly post's selected period.
+     *
+     * The update pivots between the two months of the period:
+     *   Past   = month before the period + first month of the period
+     *   Future = second month of the period + month after
+     *
+     * e.g. Sep–Oct 2026 → Past: Aug 1 – Sep 30, 2026 / Future: Oct 1 – Nov 30, 2026
+     *      Jan–Feb 2027 → Past: Dec 1, 2026 – Jan 31, 2027 / Future: Feb 1 – Mar 31, 2027
+     *      Nov–Dec 2026 → Past: Oct 1 – Nov 30, 2026 / Future: Dec 1, 2026 – Jan 31, 2027
+     */
+    private function get_period_ranges($post_id) {
+        $period_key = get_post_meta($post_id, '_brm_period', true);
+        $year = intval(get_post_meta($post_id, '_brm_year', true));
+
+        if (empty($period_key) || !isset(self::$periods[$period_key]) || !$year) {
+            return false;
+        }
+
+        $period = self::$periods[$period_key];
+        $s = $period['start_month'];
+        $e = $period['end_month'];
+
+        // mktime() rolls over months/years automatically (month 0 = Dec of prior year,
+        // day 0 = last day of the previous month), so year boundaries are handled.
+        $prior_start_ts = mktime(0, 0, 0, $s - 1, 1, $year);   // 1st of month before period
+        $prior_end_ts   = mktime(0, 0, 0, $s + 1, 0, $year);   // last day of first month
+        $ahead_start_ts = mktime(0, 0, 0, $e, 1, $year);       // 1st of second month
+        $ahead_end_ts   = mktime(0, 0, 0, $e + 2, 0, $year);   // last day of month after period
+
+        $label = function($a, $b) {
+            return (date('Y', $a) === date('Y', $b))
+                ? date('M j', $a) . ' – ' . date('M j, Y', $b)
+                : date('M j, Y', $a) . ' – ' . date('M j, Y', $b);
+        };
+        $span = function($a, $b) {
+            return (date('Y', $a) === date('Y', $b))
+                ? date('M', $a) . '–' . date('M Y', $b)
+                : date('M Y', $a) . '–' . date('M Y', $b);
+        };
+        return array(
+            'period_key'   => $period_key,
+            'period_label' => $period['label'],
+            'year'         => $year,
+            'prior_start'  => date('Y-m-d', $prior_start_ts),
+            'prior_end'    => date('Y-m-d', $prior_end_ts),
+            'prior_label'  => $label($prior_start_ts, $prior_end_ts),
+            'ahead_start'  => date('Y-m-d', $ahead_start_ts),
+            'ahead_end'    => date('Y-m-d', $ahead_end_ts),
+            'ahead_label'  => $label($ahead_start_ts, $ahead_end_ts),
+			'span_label'   => 'Past: ' . $span($prior_start_ts, $prior_end_ts) . ' · Future: ' . $span($ahead_start_ts, $ahead_end_ts),
+        );
+    }
+
+    // =========================================================================
     // AJAX: List / Create / Delete bimonthly posts
     // =========================================================================
 
@@ -271,21 +344,58 @@ class BimonthlyReportManager {
         if (!empty($gids)) $args['tax_query'] = array(array('taxonomy' => 'group', 'field' => 'term_id', 'terms' => $gids));
         $posts = get_posts($args);
         $list = array();
-        foreach ($posts as $p) {
+        foreach ($posts as $index => $p) {
             $groups = wp_get_post_terms($p->ID, 'group', array('fields' => 'names'));
-            $list[] = array('id' => $p->ID, 'title' => $p->post_title, 'date' => get_the_date('m/d/Y', $p->ID), 'group' => !empty($groups) ? implode(', ', $groups) : '—');
+                       $ranges = $this->get_period_ranges($p->ID);
+            $period_label = '';
+            $sort_val = -1;
+            if ($ranges) {
+                // Compact month spans, e.g. "Past: Aug–Sep 2026 · Future: Oct–Nov 2026"
+                $span = function($start, $end) {
+                    $a = strtotime($start); $b = strtotime($end);
+                    return (date('Y', $a) === date('Y', $b))
+                        ? date('M', $a) . '–' . date('M Y', $b)
+                        : date('M Y', $a) . '–' . date('M Y', $b);
+                };
+                $period_label = 'Past: ' . $span($ranges['prior_start'], $ranges['prior_end'])
+                              . ' · Future: ' . $span($ranges['ahead_start'], $ranges['ahead_end']);
+                $sort_val = $ranges['year'] * 100 + self::$periods[$ranges['period_key']]['start_month'];
+            }
+            $list[] = array('id' => $p->ID, 'title' => $p->post_title, 'date' => get_the_date('m/d/Y', $p->ID),
+                'group' => !empty($groups) ? implode(', ', $groups) : '—',
+                'period' => $period_label,
+                '_sort_val' => $sort_val, '_orig_index' => $index);
         }
+
+        // Order by the actual bimonthly period (year + period start month), newest
+        // first, rather than post creation date — imported posts in particular can
+        // all share nearly the same creation timestamp regardless of their period.
+        // Posts missing period/year meta fall back to their original (post_date DESC)
+        // order at the end of the list.
+        usort($list, function($a, $b) {
+            if ($a['_sort_val'] !== $b['_sort_val']) return $b['_sort_val'] - $a['_sort_val'];
+            return $a['_orig_index'] - $b['_orig_index'];
+        });
+        foreach ($list as &$item) {
+            unset($item['_sort_val'], $item['_orig_index']);
+        }
+        unset($item);
+
         wp_send_json_success($list);
     }
 
     public function ajax_create_bimonthly() {
         check_ajax_referer('brm_nonce', 'nonce');
         if (!current_user_can('edit_bimonthly_updates')) wp_send_json_error('Insufficient permissions');
-        $title = sanitize_text_field($_POST['title']);
-        $group = intval($_POST['group']);
-        if (empty($title)) wp_send_json_error('Title is required');
+        $title  = sanitize_text_field($_POST['title']);
+        $group  = intval($_POST['group']);
+        $period = sanitize_text_field($_POST['period']);
+        $year   = intval($_POST['year']);
 
-        // Validate group assignment — center editors can only use their own group
+        if (empty($title)) wp_send_json_error('Title is required');
+        if (empty($period) || !isset(self::$periods[$period])) wp_send_json_error('Please select a reporting period');
+        if ($year < 2020 || $year > 2040) wp_send_json_error('Please select a valid year');
+
         if ($group > 0) {
             $allowed = $this->get_user_group_ids();
             if (!empty($allowed) && !in_array($group, $allowed)) {
@@ -296,6 +406,10 @@ class BimonthlyReportManager {
         $pid = wp_insert_post(array('post_title' => $title, 'post_type' => 'bimonthly', 'post_status' => 'publish', 'post_author' => get_current_user_id()));
         if (is_wp_error($pid)) wp_send_json_error('Failed to create update');
         if ($group > 0) wp_set_object_terms($pid, array($group), 'group', false);
+
+        update_post_meta($pid, '_brm_period', $period);
+        update_post_meta($pid, '_brm_year', $year);
+
         wp_send_json_success(array('id' => $pid));
     }
 
@@ -309,6 +423,26 @@ class BimonthlyReportManager {
         delete_post_meta($pid, '_brm_ahead_items');
         wp_delete_post($pid, true);
         wp_send_json_success();
+    }
+
+    /**
+     * AJAX: Update the reporting period on an existing bimonthly post
+     */
+    public function ajax_save_period() {
+        check_ajax_referer('brm_nonce', 'nonce');
+        $pid    = intval($_POST['post_id']);
+        $period = sanitize_text_field($_POST['period']);
+        $year   = intval($_POST['year']);
+
+        if (!$this->user_can_access_bimonthly($pid)) wp_send_json_error('Insufficient permissions');
+        if (empty($period) || !isset(self::$periods[$period])) wp_send_json_error('Invalid period');
+        if ($year < 2020 || $year > 2040) wp_send_json_error('Invalid year');
+
+        update_post_meta($pid, '_brm_period', $period);
+        update_post_meta($pid, '_brm_year', $year);
+
+        $ranges = $this->get_period_ranges($pid);
+        wp_send_json_success(array('period' => $ranges));
     }
 
     // =========================================================================
@@ -372,6 +506,7 @@ class BimonthlyReportManager {
 
         wp_send_json_success(array(
             'id' => $post->ID, 'title' => $post->post_title, 'groups' => $gdata,
+            'period' => $this->get_period_ranges($pid),
             'prior_items' => $this->hydrate_items($prior),
             'ahead_items' => $this->hydrate_items($ahead),
         ));
@@ -461,14 +596,23 @@ class BimonthlyReportManager {
 
         if (!in_array($post_type, $this->allowed_post_types)) wp_send_json_error('Invalid post type');
 
-        $now = current_time('Y-m-d');
-        $settings = get_option('brm_pdf_settings', array());
-        $months = isset($settings['timespan_months']) ? intval($settings['timespan_months']) : 3;
+        // Get period-based date ranges from the bimonthly post
+        $ranges = $this->get_period_ranges($bimonthly_id);
 
-        if ($direction === 'prior') {
-            $rs = date('Y-m-d', strtotime("-{$months} months", strtotime($now))); $re = $now;
+        if (!$ranges) {
+            // Fallback for legacy posts without period set — use 2-month window from current date
+            $now = current_time('Y-m-d');
+            if ($direction === 'prior') {
+                $rs = date('Y-m-d', strtotime('-2 months', strtotime($now))); $re = $now;
+            } else {
+                $rs = $now; $re = date('Y-m-d', strtotime('+2 months', strtotime($now)));
+            }
         } else {
-            $rs = $now; $re = date('Y-m-d', strtotime("+{$months} months", strtotime($now)));
+            if ($direction === 'prior') {
+                $rs = $ranges['prior_start']; $re = $ranges['prior_end'];
+            } else {
+                $rs = $ranges['ahead_start']; $re = $ranges['ahead_end'];
+            }
         }
 
         $args = array('post_type' => $post_type, 'posts_per_page' => -1, 'post_status' => 'publish', 'orderby' => 'date', 'order' => 'DESC');
@@ -650,7 +794,6 @@ class BimonthlyReportManager {
         $settings = array(
             'logo_attachment_id' => intval($_POST['logo_attachment_id']),
             'logo_url' => esc_url_raw($_POST['logo_url']),
-            'timespan_months' => in_array(intval($_POST['timespan_months']), array(2, 3)) ? intval($_POST['timespan_months']) : 3,
         );
         update_option('brm_pdf_settings', $settings);
         wp_send_json_success($settings);
@@ -801,7 +944,7 @@ class BimonthlyReportManager {
             'logo_path' => $logo_path, 'updates' => $updates,
             'show_type' => $show_type, 'show_author' => $show_author, 'show_date' => $show_date,
         );
-        $this->run_pdf_generator($payload, 'Network-Meta-Report-' . date('Y-m-d') . '.pdf');
+        $this->run_pdf_generator($payload, 'PTTC-Network-Meta-Report-' . date('Y-m-d') . '.pdf');
     }
 
     /**
@@ -924,6 +1067,150 @@ class BimonthlyReportManager {
         readfile($pdf_file);
         @unlink($pdf_file);
         exit;
+    }
+
+    // =========================================================================
+    // Metabox: Workplan Connections (read-only, on post edit screens)
+    // =========================================================================
+
+    /**
+     * Register the connections metabox on relevant post types
+     */
+    public function register_connection_metabox() {
+        $post_types = array('news', 'event', 'products_and_resourc', 'bimonthly-highlight');
+        foreach ($post_types as $pt) {
+            add_meta_box(
+                'brm-workplan-connections',
+                __('Bimonthly Update Connections', 'bimonthly-report-manager'),
+                array($this, 'render_connection_metabox'),
+                $pt,
+                'side',
+                'default'
+            );
+        }
+    }
+
+    /**
+     * Render the connections metabox — shows which bimonthly updates reference
+     * this post and what workplan outputs are associated with it.
+     */
+    public function render_connection_metabox($post) {
+        $connections = $this->find_bimonthly_connections($post->ID);
+
+        if (empty($connections)) {
+            echo '<p style="color:#888; font-style:italic;">This post is not currently referenced in any bimonthly update.</p>';
+            return;
+        }
+
+        echo '<style>
+            .brm-conn-update { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+            .brm-conn-update:last-child { border-bottom: none; margin-bottom: 0; }
+            .brm-conn-update-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+            .brm-conn-update-title a { text-decoration: none; }
+            .brm-conn-section { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 2px; }
+            .brm-conn-output { font-size: 12px; color: #1a3a5c; margin: 3px 0 3px 8px; line-height: 1.4; }
+            .brm-conn-output-path { font-weight: 600; }
+            .brm-conn-no-outputs { font-size: 12px; color: #999; font-style: italic; margin-left: 8px; }
+        </style>';
+
+        foreach ($connections as $conn) {
+            echo '<div class="brm-conn-update">';
+            echo '<div class="brm-conn-update-title"><a href="' . esc_url(admin_url('admin.php?page=bimonthly-report-manager')) . '">' . esc_html($conn['bimonthly_title']) . '</a></div>';
+            echo '<div class="brm-conn-section">' . esc_html($conn['section']) . '</div>';
+
+            if (!empty($conn['outputs'])) {
+                foreach ($conn['outputs'] as $o) {
+                    $path = '';
+                    if (!empty($o['goal_letter'])) $path .= $o['goal_letter'] . '.';
+                    if (!empty($o['objective_number'])) $path .= $o['objective_number'] . '.';
+                    if (!empty($o['output_letter'])) $path .= $o['output_letter'] . '.';
+
+                    echo '<div class="brm-conn-output">';
+                    if ($path) echo '<span class="brm-conn-output-path">' . esc_html($path) . '</span> ';
+                    echo esc_html($o['output_desc']);
+                    echo '</div>';
+                }
+            } else {
+                echo '<div class="brm-conn-no-outputs">No workplan outputs assigned</div>';
+            }
+
+            echo '</div>';
+        }
+    }
+
+    /**
+     * Find all bimonthly updates that reference a given post ID.
+     * Returns array of connections with bimonthly title, section, and outputs.
+     */
+    private function find_bimonthly_connections($post_id) {
+        $connections = array();
+
+        $bimonthly_posts = get_posts(array(
+            'post_type' => 'bimonthly',
+            'posts_per_page' => -1,
+            'post_status' => 'publish',
+        ));
+
+        foreach ($bimonthly_posts as $bp) {
+            $sections = array(
+                '_brm_prior_items' => 'Past Highlights',
+                '_brm_ahead_items' => 'Future Highlights',
+            );
+
+            foreach ($sections as $meta_key => $section_label) {
+                $items = get_post_meta($bp->ID, $meta_key, true);
+                if (empty($items)) continue;
+                $items = json_decode($items, true);
+                if (!is_array($items)) continue;
+
+                foreach ($items as $item) {
+                    if (intval($item['post_id']) !== intval($post_id)) continue;
+
+                    // Found a match — hydrate the outputs
+                    $hydrated_outputs = array();
+                    $outputs_raw = isset($item['outputs']) && is_array($item['outputs']) ? $item['outputs'] : array();
+
+                    // Backwards compat
+                    if (empty($outputs_raw) && !empty($item['objective_id'])) {
+                        $outputs_raw = array(array(
+                            'objective_id' => $item['objective_id'],
+                            'output_index' => isset($item['output_index']) ? $item['output_index'] : 0,
+                            'goal_id' => isset($item['goal_id']) ? $item['goal_id'] : 0,
+                        ));
+                    }
+
+                    foreach ($outputs_raw as $out) {
+                        $o = array(
+                            'goal_letter' => '', 'objective_number' => '',
+                            'output_letter' => '', 'output_desc' => '',
+                        );
+
+                        if (!empty($out['goal_id'])) {
+                            $o['goal_letter'] = get_field('goal_letter', intval($out['goal_id'])) ?: '';
+                        }
+                        if (!empty($out['objective_id'])) {
+                            $o['objective_number'] = get_field('objective_number', intval($out['objective_id'])) ?: '';
+                            $outs = get_field('objective_outputs', intval($out['objective_id']));
+                            $idx = intval($out['output_index']);
+                            if (!empty($outs) && isset($outs[$idx])) {
+                                $o['output_letter'] = isset($outs[$idx]['output_letter']) ? $outs[$idx]['output_letter'] : '';
+                                $o['output_desc'] = isset($outs[$idx]['output_description']) ? $outs[$idx]['output_description'] : '';
+                            }
+                        }
+                        $hydrated_outputs[] = $o;
+                    }
+
+                    $connections[] = array(
+                        'bimonthly_id'    => $bp->ID,
+                        'bimonthly_title' => $bp->post_title,
+                        'section'         => $section_label,
+                        'outputs'         => $hydrated_outputs,
+                    );
+                }
+            }
+        }
+
+        return $connections;
     }
 
     // =========================================================================
