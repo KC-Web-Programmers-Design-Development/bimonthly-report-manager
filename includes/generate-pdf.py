@@ -14,6 +14,7 @@ Body is narrative-style (not tabular).
 import json
 import sys
 import os
+from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
@@ -105,6 +106,24 @@ def build_styles():
         fontSize=10,
         leading=14,
         textColor=HexColor('#34495e'),
+        leftIndent=12,
+        spaceAfter=10,
+    ))
+
+    # Description followed by a topics line: tighten the gap under the description
+    styles.add(ParagraphStyle(
+        'OutputDescTight',
+        parent=styles['OutputDesc'],
+        spaceAfter=2,
+    ))
+
+    styles.add(ParagraphStyle(
+        'OutputTopics',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=11,
+        textColor=HexColor('#666666'),
+        fontName='Helvetica-Oblique',
         leftIndent=12,
         spaceAfter=10,
     ))
@@ -232,7 +251,11 @@ def build_section(section_label, items, styles, show_type=True, show_author=True
                     if ol: path_parts.append(str(ol))
                     path = '.'.join(path_parts) + '.' if path_parts else ''
                     txt = '{0} {1}'.format(path, od) if path else od
-                    elements.append(Paragraph(txt, styles['OutputDesc']))
+                    topics = [str(t) for t in (o.get('topics') or []) if t]
+                    elements.append(Paragraph(txt, styles['OutputDescTight' if topics else 'OutputDesc']))
+                    if topics:
+                        elements.append(Paragraph(
+                            'Topics: ' + escape(', '.join(topics)), styles['OutputTopics']))
 
         # Separator between items
         elements.append(Spacer(1, 4))

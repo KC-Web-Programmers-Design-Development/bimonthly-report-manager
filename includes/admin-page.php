@@ -19,8 +19,9 @@
                     <h2 id="brm-report-title"></h2>
                     <span id="brm-report-group" class="brm-badge"></span>
                     <span id="brm-report-period" class="brm-badge brm-badge-period"></span>
-                    <button type="button" id="brm-edit-period" class="button button-small" title="Edit period">✎</button>
+                    <button type="button" id="brm-edit-period" class="button button-small" title="Edit title and period">✎</button>
                     <div id="brm-period-editor" style="display:none;">
+                         <input type="text" id="brm-edit-title-input" class="regular-text" placeholder="Update title" maxlength="200" />
                          <select id="brm-edit-period-select">
                             <option value="">— Period —</option>
                             <?php foreach (BimonthlyReportManager::get_periods() as $key => $p) : ?>
@@ -130,6 +131,7 @@
                     <div class="brm-field-row">
                         <label for="brm-output">Output</label>
                         <select id="brm-output" disabled><option value="">— Select an objective first —</option></select>
+                        <div id="brm-output-topics" class="brm-output-topics" style="display:none;"></div>
                     </div>
 
                     <button type="button" id="brm-add-output-btn" class="button" disabled>+ Add Output</button>

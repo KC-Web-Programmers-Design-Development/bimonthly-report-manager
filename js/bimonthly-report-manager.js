@@ -7,6 +7,8 @@
         editingIndex: -1, // -1 = adding new, >= 0 = editing existing
         priorItems: [],
         aheadItems: [],
+        outputTopics: {}, // topics per output index for the selected objective
+        outputTopicValues: {}, // topic slugs per output index for the selected objective
         stagedOutputs: [], // outputs staged in the modal before saving
 
         init: function() {
@@ -55,6 +57,9 @@
 
             // Add output to staged list
             $('#brm-add-output-btn').on('click', function() { self.stageOutput(); });
+            $(document).on('change', '.brm-topic-editor input[type=checkbox]', function() {
+                self.saveOutputTopics($(this).closest('.brm-topic-editor'), $(this));
+            });
 
             // Remove staged output
             $(document).on('click', '.brm-remove-staged', function() {
@@ -77,6 +82,12 @@
             });
 
             $(document).on('blur', '.brm-summary-textarea', function() { self.saveSummary($(this)); });
+            $(document).on('click', '.brm-edit-title', function() { self.startTitleEdit($(this).closest('td')); });
+            $(document).on('keydown', '.brm-title-input', function(e) {
+                if (e.which === 13) { e.preventDefault(); $(this).data('commit', true).blur(); }
+                else if (e.which === 27) { e.preventDefault(); $(this).data('cancel', true).blur(); }
+            });
+            $(document).on('blur', '.brm-title-input', function() { self.finishTitleEdit($(this)); });
         },
 
         // =====================================================================
@@ -167,7 +178,9 @@
                             if (o.output_letter) path += o.output_letter + '.';
                             var txt = path ? path + ' ' + o.output_desc : o.output_desc;
                             if (txt.length > 60) txt = txt.substring(0, 57) + '…';
-                            outputParts.push(txt);
+                            var part = self.esc(txt);
+                            if (o.topics && o.topics.length) part += '<span class="brm-output-topics">Topics: ' + self.esc(o.topics.join(', ')) + '</span>';
+                            outputParts.push(part);
                         }
                     });
                 }
@@ -179,7 +192,9 @@
                         if (o.goal_letter) path += o.goal_letter + '.';
                         if (o.objective_number) path += o.objective_number + '.';
                         if (o.output_letter) path += o.output_letter + '.';
-                        return path ? path + ' ' + o.output_desc : o.output_desc;
+                        var t = path ? path + ' ' + o.output_desc : o.output_desc;
+                        if (o.topics && o.topics.length) t += ' [Topics: ' + o.topics.join(', ') + ']';
+                        return t;
                     }).join('\n');
                 }
 
@@ -187,7 +202,9 @@
 
                 var $row = $('<tr>' +
                     '<td>' + self.esc(item.post_type_label) + '</td>' +
-                    '<td><a href="' + self.esc(item.permalink) + '" target="_blank">' + self.esc(item.post_title) + '</a></td>' +
+                    '<td class="brm-title-cell"><a href="' + self.esc(item.permalink) + '" target="_blank">' + self.esc(item.post_title) + '</a>' +
+                        (item.post_type === 'bimonthly-highlight' ? ' <button type="button" class="button-link brm-edit-title" data-post-id="' + item.post_id + '" data-direction="' + direction + '" data-index="' + idx + '" title="Edit title">✎</button>' : '') +
+                    '</td>' +
                     '<td>' + self.esc(item.author) + '</td>' +
                     '<td>' + self.esc(item.date) + '</td>' +
                     '<td class="brm-summary-cell"><textarea class="brm-summary-textarea" data-post-id="' + item.post_id + '" rows="3">' + self.esc(summaryVal) + '</textarea></td>' +
@@ -261,6 +278,7 @@
                 $editPeriod.val('');
                 $editYear.val(new Date().getFullYear());
             }
+            $('#brm-edit-title-input').val($('#brm-report-title').text());
             // Show editor, hide badge and edit button
             $periodBadge.hide();
             $('#brm-edit-period').hide();
@@ -278,6 +296,9 @@
             var period = $('#brm-edit-period-select').val();
             var year = $('#brm-edit-year-select').val();
 
+            var title = $.trim($('#brm-edit-title-input').val());
+
+            if (!title) { alert('Please enter a title.'); return; }
             if (!period) { alert('Please select a period.'); return; }
 
             $('#brm-save-period').prop('disabled', true).text('Saving…');
@@ -286,12 +307,14 @@
                 action: 'brm_save_period',
                 nonce: brm_ajax.nonce,
                 post_id: this.currentReportId,
+                title: title,
                 period: period,
                 year: year
             }, function(res) {
                 $('#brm-save-period').prop('disabled', false).text('Save');
                 if (res.success) {
                     self.hidePeriodEditor();
+                    if (res.data.title) $('#brm-report-title').text(res.data.title);
 
                     // Update the display
                     var p = res.data.period;
@@ -353,7 +376,9 @@
                         goal_id: o.goal_id,
                         objective_id: o.objective_id,
                         output_index: o.output_index,
-                        label: label
+                        label: label,
+                        topics: o.topics || [],
+                        topic_values: o.topic_values || []
                     });
                 });
             }
@@ -378,6 +403,7 @@
             $('#brm-goal').val('').prop('disabled', true).html('<option value="">— Select a work plan first —</option>');
             $('#brm-objective').val('').prop('disabled', true).html('<option value="">— Select a goal first —</option>');
             $('#brm-output').val('').prop('disabled', true).html('<option value="">— Select an objective first —</option>');
+            BRM.outputTopics = {}; BRM.outputTopicValues = {}; $('#brm-output-topics').hide().empty();
             $('#brm-add-output-btn').prop('disabled', true);
 
             this.renderStagedOutputs();
@@ -401,6 +427,7 @@
             $('#brm-goal').val('').prop('disabled', true).html('<option value="">— Select a work plan first —</option>');
             $('#brm-objective').val('').prop('disabled', true).html('<option value="">— Select a goal first —</option>');
             $('#brm-output').val('').prop('disabled', true).html('<option value="">— Select an objective first —</option>');
+            BRM.outputTopics = {}; BRM.outputTopicValues = {}; $('#brm-output-topics').hide().empty();
             $('#brm-add-output-btn').prop('disabled', true);
         },
 
@@ -516,6 +543,7 @@
             $('#brm-goal').val('').prop('disabled', true).html('<option value="">— Select a work plan first —</option>');
             $('#brm-objective').val('').prop('disabled', true).html('<option value="">— Select a goal first —</option>');
             $('#brm-output').val('').prop('disabled', true).html('<option value="">— Select an objective first —</option>');
+            BRM.outputTopics = {}; BRM.outputTopicValues = {}; $('#brm-output-topics').hide().empty();
             $('#brm-add-output-btn').prop('disabled', true);
         },
 
@@ -531,6 +559,7 @@
             });
             $('#brm-objective').val('').prop('disabled', true).html('<option value="">— Select a goal first —</option>');
             $('#brm-output').val('').prop('disabled', true).html('<option value="">— Select an objective first —</option>');
+            BRM.outputTopics = {}; BRM.outputTopicValues = {}; $('#brm-output-topics').hide().empty();
             $('#brm-add-output-btn').prop('disabled', true);
         },
 
@@ -538,13 +567,14 @@
             var id = $('#brm-goal').val(), $o = $('#brm-objective');
             if (!id) { $o.prop('disabled', true).html('<option value="">— Select a goal first —</option>'); return; }
             $o.prop('disabled', true).html('<option value="">Loading objectives…</option>');
-            $.post(brm_ajax.ajax_url, { action: 'brm_get_objectives', nonce: brm_ajax.nonce, goal_id: id }, function(res) {
+            $.post(brm_ajax.ajax_url, { action: 'brm_get_objectives', nonce: brm_ajax.nonce, workplan_id: $('#brm-workplan').val(), goal_id: id }, function(res) {
                 if (!res.success) return;
                 var h = '<option value="">— Select an objective —</option>';
                 res.data.forEach(function(o) { h += '<option value="' + o.id + '">' + BRM.esc(o.title) + '</option>'; });
                 $o.html(h).prop('disabled', false);
             });
             $('#brm-output').val('').prop('disabled', true).html('<option value="">— Select an objective first —</option>');
+            BRM.outputTopics = {}; BRM.outputTopicValues = {}; $('#brm-output-topics').hide().empty();
             $('#brm-add-output-btn').prop('disabled', true);
         },
 
@@ -552,10 +582,11 @@
             var id = $('#brm-objective').val(), $out = $('#brm-output');
             if (!id) { $out.prop('disabled', true).html('<option value="">— Select an objective first —</option>'); return; }
             $out.prop('disabled', true).html('<option value="">Loading outputs…</option>');
-            $.post(brm_ajax.ajax_url, { action: 'brm_get_outputs', nonce: brm_ajax.nonce, objective_id: id }, function(res) {
+            $.post(brm_ajax.ajax_url, { action: 'brm_get_outputs', nonce: brm_ajax.nonce, workplan_id: $('#brm-workplan').val(), goal_id: $('#brm-goal').val(), objective_id: id }, function(res) {
                 if (!res.success) return;
                 var h = '<option value="">— Select an output —</option>';
-                res.data.forEach(function(o) { h += '<option value="' + o.index + '">' + BRM.esc(o.title) + '</option>'; });
+                BRM.outputTopics = {}; BRM.outputTopicValues = {};
+                res.data.forEach(function(o) { BRM.outputTopics[o.index] = o.topics || []; BRM.outputTopicValues[o.index] = o.topic_values || []; h += '<option value="' + o.index + '">' + BRM.esc(o.title) + '</option>'; });
                 $out.html(h).prop('disabled', false);
                 if (res.data.length === 0) $out.html('<option value="">No outputs found</option>');
             });
@@ -565,6 +596,82 @@
         onOutputChange: function() {
             var val = $('#brm-output').val();
             $('#brm-add-output-btn').prop('disabled', val === '' || val === null);
+            if (val === '' || val === null) { $('#brm-output-topics').hide().empty(); return; }
+            $('#brm-output-topics').html(this.topicEditorHtml({
+                workplan_id: parseInt($('#brm-workplan').val()) || 0,
+                goal_id: parseInt($('#brm-goal').val()) || 0,
+                objective_id: parseInt($('#brm-objective').val()) || 0,
+                output_index: parseInt(val) || 0
+            }, BRM.outputTopicValues[val] || [])).show();
+        },
+
+        // =====================================================================
+        // Topics of Interest editor (checkboxes on a work plan output)
+        // =====================================================================
+
+        topicEditorHtml: function(ctx, values) {
+            var choices = brm_ajax.topic_choices || {}, keys = Object.keys(choices);
+            if (!keys.length) return '';
+            values = (values || []).map(String);
+            var h = '<div class="brm-topic-editor" data-workplan="' + ctx.workplan_id + '" data-goal="' + ctx.goal_id +
+                '" data-objective="' + ctx.objective_id + '" data-index="' + ctx.output_index + '">' +
+                '<div class="brm-topic-editor-title">Topics of Interest <span class="brm-topic-status"></span></div>';
+            keys.forEach(function(k) {
+                h += '<label class="brm-topic-option"><input type="checkbox" value="' + BRM.esc(k) + '"' +
+                    (values.indexOf(String(k)) !== -1 ? ' checked' : '') + '> ' + BRM.esc(choices[k]) + '</label>';
+            });
+            return h + '</div>';
+        },
+
+        saveOutputTopics: function($editor, $changed) {
+            var ctx = {
+                workplan_id: parseInt($editor.data('workplan')), goal_id: parseInt($editor.data('goal')),
+                objective_id: parseInt($editor.data('objective')), output_index: parseInt($editor.data('index'))
+            };
+            var checked = $editor.find('input:checked').map(function() { return this.value; }).get();
+            var $status = $editor.find('.brm-topic-status').text('Saving…').removeClass('brm-topic-error');
+            var $inputs = $editor.find('input').prop('disabled', true);
+
+            $.post(brm_ajax.ajax_url, $.extend({ action: 'brm_save_output_topics', nonce: brm_ajax.nonce, topics: checked }, ctx), function(res) {
+                $inputs.prop('disabled', false);
+                if (!res.success) {
+                    $changed.prop('checked', !$changed.prop('checked')); // revert
+                    $status.addClass('brm-topic-error').text('Not saved: ' + (res.data || 'error'));
+                    return;
+                }
+                BRM.syncOutputTopics(ctx, res.data.topic_values, res.data.topics);
+                $status.text('Saved');
+                setTimeout(function() { $status.text(''); }, 1500);
+            }).fail(function() {
+                $inputs.prop('disabled', false);
+                $changed.prop('checked', !$changed.prop('checked'));
+                $status.addClass('brm-topic-error').text('Not saved: request failed');
+            });
+        },
+
+        // Push new topics to everything in memory that shows the same output
+        syncOutputTopics: function(ctx, values, labels) {
+            var same = function(o) {
+                return o.workplan_id === ctx.workplan_id && o.goal_id === ctx.goal_id &&
+                       o.objective_id === ctx.objective_id && o.output_index === ctx.output_index;
+            };
+            var apply = function(o) { if (same(o)) { o.topic_values = values.slice(); o.topics = labels.slice(); } };
+            this.stagedOutputs.forEach(apply);
+            [this.priorItems, this.aheadItems].forEach(function(list) {
+                (list || []).forEach(function(it) { (it.outputs || []).forEach(apply); });
+            });
+            if (parseInt($('#brm-objective').val()) === ctx.objective_id) {
+                this.outputTopics[ctx.output_index] = labels.slice();
+                this.outputTopicValues[ctx.output_index] = values.slice();
+            }
+            // Keep any other open editor for this output in step
+            $('.brm-topic-editor').each(function() {
+                var $e = $(this);
+                if (parseInt($e.data('objective')) !== ctx.objective_id || parseInt($e.data('index')) !== ctx.output_index) return;
+                $e.find('input').each(function() { this.checked = values.indexOf(this.value) !== -1; });
+            });
+            this.renderItems('prior', this.priorItems);
+            this.renderItems('ahead', this.aheadItems);
         },
 
         // =====================================================================
@@ -577,7 +684,9 @@
                 goal_id: parseInt($('#brm-goal').val()) || 0,
                 objective_id: parseInt($('#brm-objective').val()) || 0,
                 output_index: parseInt($('#brm-output').val()) || 0,
-                label: $('#brm-output option:selected').text()
+                label: $('#brm-output option:selected').text(),
+                topics: (BRM.outputTopics && BRM.outputTopics[$('#brm-output').val()]) || [],
+                topic_values: (BRM.outputTopicValues && BRM.outputTopicValues[$('#brm-output').val()]) || []
             };
 
             this.stagedOutputs.push(output);
@@ -588,6 +697,7 @@
             $('#brm-goal').val('').prop('disabled', true).html('<option value="">— Select a work plan first —</option>');
             $('#brm-objective').val('').prop('disabled', true).html('<option value="">— Select a goal first —</option>');
             $('#brm-output').val('').prop('disabled', true).html('<option value="">— Select an objective first —</option>');
+            BRM.outputTopics = {}; BRM.outputTopicValues = {}; $('#brm-output-topics').hide().empty();
             $('#brm-add-output-btn').prop('disabled', true);
 
             // Enable save since we have at least one output
@@ -605,7 +715,8 @@
 
             $container.show();
             this.stagedOutputs.forEach(function(o, i) {
-                $list.append('<li>' + BRM.esc(o.label) + ' <button type="button" class="brm-remove-staged" data-index="' + i + '" title="Remove">✕</button></li>');
+                var topicsHtml = BRM.topicEditorHtml(o, o.topic_values || []);
+                $list.append('<li><span>' + BRM.esc(o.label) + topicsHtml + '</span> <button type="button" class="brm-remove-staged" data-index="' + i + '" title="Remove">✕</button></li>');
             });
         },
 
@@ -617,6 +728,23 @@
             var self = this, direction = this.currentDirection;
             var postId = parseInt($('#brm-post-select').val());
             if (!postId) { alert('Please select a post.'); return; }
+
+            // An output that is selected in the dropdowns but was never added with "+ Add Output"
+            // would otherwise be dropped silently — stage it now.
+            var pendingOutput = $('#brm-output').val();
+            if (pendingOutput !== '' && pendingOutput !== null && !$('#brm-add-output-btn').prop('disabled')) {
+                var pending = {
+                    workplan_id: parseInt($('#brm-workplan').val()) || 0,
+                    goal_id: parseInt($('#brm-goal').val()) || 0,
+                    objective_id: parseInt($('#brm-objective').val()) || 0,
+                    output_index: parseInt(pendingOutput) || 0
+                };
+                var already = this.stagedOutputs.some(function(o) {
+                    return o.workplan_id === pending.workplan_id && o.goal_id === pending.goal_id &&
+                           o.objective_id === pending.objective_id && o.output_index === pending.output_index;
+                });
+                if (!already) this.stagedOutputs.push(pending);
+            }
 
             var newItem = {
                 post_id: postId,
@@ -674,13 +802,57 @@
         },
 
         // =====================================================================
+        // Edit highlight title (inline)
+        // =====================================================================
+
+        startTitleEdit: function($td) {
+            if ($td.find('.brm-title-input').length) return;
+            var $btn = $td.find('.brm-edit-title');
+            var items = ($btn.data('direction') === 'prior') ? this.priorItems : this.aheadItems;
+            var item = items[$btn.data('index')];
+            if (!item) return;
+            $td.data('orig', $td.html());
+            var $input = $('<input type="text" class="brm-title-input" maxlength="200">')
+                .val(item.post_title)
+                .data({ postId: item.post_id, direction: $btn.data('direction'), index: $btn.data('index'), original: item.post_title });
+            $td.empty().append($input).append('<div class="brm-title-hint">Enter to save · Esc to cancel</div>');
+            $input.focus().select();
+        },
+
+        finishTitleEdit: function($input) {
+            var self = this, $td = $input.closest('td');
+            var d = $input.data(), title = $.trim($input.val());
+            if (d.done) return; // disabling the field can fire a second blur
+            $input.data('done', true);
+            var items = (d.direction === 'prior') ? this.priorItems : this.aheadItems;
+
+            // Blur without Enter saves too (matches the summary field); Esc or unchanged/empty just restores.
+            if (d.cancel || title === '' || title === d.original) { $td.html($td.data('orig')); return; }
+
+            $input.prop('disabled', true).addClass('brm-saving');
+            $.post(brm_ajax.ajax_url, { action: 'brm_save_title', nonce: brm_ajax.nonce, report_id: this.currentReportId, post_id: d.postId, title: title }, function(res) {
+                if (res.success) {
+                    // The same highlight may appear in several rows/sections — keep all copies in sync
+                    [self.priorItems, self.aheadItems].forEach(function(list) {
+                        list.forEach(function(it) { if (it.post_id === d.postId) it.post_title = res.data.title; });
+                    });
+                    self.renderItems('prior', self.priorItems);
+                    self.renderItems('ahead', self.aheadItems);
+                } else {
+                    $td.html($td.data('orig'));
+                    alert('Error saving title: ' + (res.data || ''));
+                }
+            });
+        },
+
+        // =====================================================================
         // Save summary
         // =====================================================================
 
         saveSummary: function($ta) {
             var pid = $ta.data('post-id'), summary = $ta.val();
             $ta.addClass('brm-saving');
-            $.post(brm_ajax.ajax_url, { action: 'brm_save_summary', nonce: brm_ajax.nonce, post_id: pid, summary: summary }, function(res) {
+            $.post(brm_ajax.ajax_url, { action: 'brm_save_summary', nonce: brm_ajax.nonce, report_id: this.currentReportId, post_id: pid, summary: summary }, function(res) {
                 $ta.removeClass('brm-saving');
                 if (res.success) { $ta.addClass('brm-saved'); setTimeout(function() { $ta.removeClass('brm-saved'); }, 1500); }
                 else alert('Error saving summary: ' + (res.data || ''));

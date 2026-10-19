@@ -2,6 +2,23 @@
 
 Oct 5, 2026 · @SCJ
 
+## **2.4.1 — Oct 19, 2026**
+
+Upgrades from 2.3.6. Files changed: `bimonthly-report-manager.php`, `includes/admin-page.php`, `includes/generate-pdf.py`, `css/bimonthly-report-manager.css`, `js/bimonthly-report-manager.js`. New: `includes/window-audit-page.php`.
+
+Written from a diff against 2.3.6; the feature list below is reconstructed from the code, not from the original change notes. Versions 2.4.0 and 2.4.1 were developed for pttcnetwork and are not separately recorded.
+
+### **Added**
+
+* **Topics of Interest.** Reads the `topics_of_interest` checkbox sub-field of the work plan's `objective_outputs` repeater (`get_topic_choices()`). Topics show on picked outputs, in the item dialog (editable via the new `brm_save_output_topics` action), in the connections view, and in the PDF export (`generate-pdf.py`). The whole feature is conditional on the sub-field existing; without it no choices are found, no editor renders, and output is unchanged from 2.3.6.
+* **Window Audit page** (administrators): compares saved items against the old (2.3.4) and new (2.3.6+) date windows.
+* **Title editing.** The ✎ editor now edits the update title as well as the period.
+
+### **Notes**
+
+* No database changes.
+* Clear any caching plugin or CDN and hard-refresh the Bimonthly Updates page after deploying.
+
 ## **2.3.6 — Oct 5, 2026**
 
 Upgrades from 2.3.3. Files changed: `bimonthly-report-manager.php`, `includes/admin-page.php`, `js/bimonthly-report-manager.js`.

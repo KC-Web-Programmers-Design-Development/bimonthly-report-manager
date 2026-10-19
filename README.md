@@ -1,6 +1,6 @@
 # Bimonthly Report Manager
 
-**Version:** 2.3.6
+**Version:** 2.4.1
 **Author:** KC Web Programmers
 **Text domain:** `bimonthly-report-manager`
 
@@ -9,6 +9,9 @@ A WordPress plugin for building and exporting bimonthly updates. Each update has
 ## Features
 
 - **Update manager** with a sidebar list of updates and an editor for Past and Future highlights.
+- **Topics of Interest (optional).** If the work plan's `objective_outputs` repeater has a `topics_of_interest` checkbox sub-field, each output's topics are shown in the picker, the item dialog (where they can be edited), the sidebar connections view and the PDF export. If the field does not exist, none of this appears and nothing changes. Sites that don't use the field (such as attcnetwork) need no configuration.
+- **Window Audit** (Bimonthly Updates > Window Audit, administrators only): a read-only comparison of saved items against the old (2.3.4) and new (2.3.6+) Past/Future windows.
+- **Edit title and period.** The ✎ button on an update edits its title as well as its period.
 - **Period-based date windows.** Choose a reporting period and year, and the post picker only offers content from the matching date ranges (see [Reporting periods](#reporting-periods)).
 - **Cascading workplan selection.** Link each item to a workplan, goal, objective and output.
 - **Summary editing.** Edit the internal reporting summary for an item directly in the editor.
@@ -123,6 +126,12 @@ No custom tables. Each update is a `bimonthly` post with this meta:
 | `_brm_ahead_items` | JSON list of Future Highlight items |
 
 Plugin settings are stored in the `brm_group_config` option and the PDF cover settings.
+
+## Upgrading to 2.4.1
+
+- Builds on 2.3.6 (including its period windows). No database changes.
+- Topics of Interest is conditional on the ACF sub-field `topics_of_interest` existing under `objective_outputs`. Adding the field later turns the feature on with no code change.
+- Saving topics from the item dialog writes to the work plan objective's `objective_outputs` data. It needs the same capability as the other editing actions, and returns an error if the field isn't available.
 
 ## Upgrading to 2.3.6
 

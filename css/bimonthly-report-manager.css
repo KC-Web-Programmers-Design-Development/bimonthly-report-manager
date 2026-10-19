@@ -470,3 +470,77 @@
 .brm-remove-staged:hover {
     color: #d63638;
 }
+
+/* Topics of interest (read-only, from work plan outputs) */
+.brm-output-topics {
+    display: block;
+    font-size: 11px;
+    color: #555;
+    font-style: italic;
+    line-height: 1.4;
+}
+
+#brm-output-topics {
+    margin-top: 4px;
+}
+
+/* Inline highlight title editing */
+.brm-edit-title {
+    cursor: pointer;
+    color: #787c82;
+    text-decoration: none;
+    margin-left: 4px;
+}
+
+.brm-edit-title:hover {
+    color: #2271b1;
+}
+
+.brm-title-input {
+    width: 100%;
+    font-size: 13px;
+}
+
+.brm-title-input.brm-saving {
+    background-color: #fff8e5;
+    border-color: #dba617;
+}
+
+.brm-title-hint {
+    font-size: 11px;
+    color: #787c82;
+    margin-top: 2px;
+}
+
+#brm-edit-title-input {
+    height: 28px;
+    font-size: 12px;
+    min-width: 240px;
+}
+
+/* Topics of Interest checkboxes in the item dialog */
+.brm-topic-editor {
+    margin: 6px 0 4px;
+    padding: 8px 10px;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    border-radius: 3px;
+    font-style: normal;
+}
+.brm-topic-editor-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: #50575e;
+    margin-bottom: 4px;
+}
+.brm-topic-status { font-weight: 400; text-transform: none; letter-spacing: 0; color: #2271b1; margin-left: 6px; }
+.brm-topic-status.brm-topic-error { color: #b32d2e; }
+.brm-topic-option {
+    display: block;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #2c3338;
+    margin: 2px 0;
+}

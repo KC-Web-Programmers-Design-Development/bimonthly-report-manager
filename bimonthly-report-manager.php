@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Bimonthly Report Manager
  * Description: Manage bimonthly updates with cascading workplan output selection and date-filtered post selection
- * Version: 2.3.6
+ * Version: 2.4.1
  * Author: KC Web Programmers
  * Text Domain: bimonthly-report-manager
  */
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) exit;
 
 define('BRM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BRM_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('BRM_VERSION', '2.3.6');
+define('BRM_VERSION', '2.4.1');
 
 /**
  * On activation, grant 'edit_bimonthly_updates' to administrator.
@@ -47,9 +47,9 @@ class BimonthlyReportManager {
             'brm_get_workplans', 'brm_get_goals', 'brm_get_objectives', 'brm_get_outputs',
             'brm_save_report_items', 'brm_delete_report_item',
             'brm_create_bimonthly', 'brm_delete_bimonthly', 'brm_create_highlight',
-            'brm_export_pdf', 'brm_save_settings', 'brm_save_summary',
+            'brm_export_pdf', 'brm_save_settings', 'brm_save_summary', 'brm_save_output_topics',
             'brm_get_all_updates_for_meta', 'brm_export_meta_pdf', 'brm_get_meta_preview',
-            'brm_save_group_config', 'brm_apply_capabilities', 'brm_save_period',
+            'brm_save_group_config', 'brm_apply_capabilities', 'brm_save_period', 'brm_save_title',
         );
         foreach ($ajax_actions as $action) {
             $method = 'ajax_' . str_replace('brm_', '', $action);
@@ -65,6 +65,7 @@ class BimonthlyReportManager {
         add_menu_page('Bimonthly Updates', 'Bimonthly Updates', 'edit_bimonthly_updates', 'bimonthly-report-manager', array($this, 'admin_page'), 'dashicons-calendar-alt', 31);
         add_submenu_page('bimonthly-report-manager', 'Settings', 'Settings', 'manage_options', 'brm-pdf-settings', array($this, 'settings_page'));
         add_submenu_page('bimonthly-report-manager', 'Meta Report', 'Meta Report', 'edit_others_workplans', 'brm-meta-report', array($this, 'meta_report_page'));
+        add_submenu_page('bimonthly-report-manager', 'Bimonthly Window Audit', 'Window Audit', 'manage_options', 'brm-window-audit', array($this, 'window_audit_page'));
     }
 
     public function enqueue_admin_scripts($hook) {
@@ -77,6 +78,7 @@ class BimonthlyReportManager {
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('brm_nonce'),
             'is_admin' => current_user_can('edit_others_workplans'),
+            'topic_choices' => (object) $this->get_topic_choices(),
         ));
     }
 
@@ -88,6 +90,7 @@ class BimonthlyReportManager {
 
     public function admin_page() { include BRM_PLUGIN_PATH . 'includes/admin-page.php'; }
     public function settings_page() { include BRM_PLUGIN_PATH . 'includes/settings-page.php'; }
+    public function window_audit_page() { require_once BRM_PLUGIN_PATH . 'includes/window-audit-page.php'; brmwa_render_page(); }
     public function meta_report_page() { include BRM_PLUGIN_PATH . 'includes/meta-report-page.php'; }
 
     // =========================================================================
@@ -200,6 +203,64 @@ class BimonthlyReportManager {
     // Permissions
     // =========================================================================
 
+    /**
+     * Topics of interest choices (slug => label) from the ACF checkbox sub-field of objective_outputs.
+     */
+    private $topic_choices = null;
+
+    private function get_topic_choices() {
+        if ($this->topic_choices !== null) return $this->topic_choices;
+        $this->topic_choices = array();
+        if (function_exists('acf_get_field')) {
+            $repeater = acf_get_field('objective_outputs');
+            if ($repeater && !empty($repeater['sub_fields'])) {
+                foreach ($repeater['sub_fields'] as $sf) {
+                    if (isset($sf['name']) && $sf['name'] === 'topics_of_interest' && !empty($sf['choices']) && is_array($sf['choices'])) {
+                        $this->topic_choices = $sf['choices'];
+                        break;
+                    }
+                }
+            }
+        }
+        return $this->topic_choices;
+    }
+
+    /**
+     * Convert a raw topics_of_interest value into a flat array of labels.
+     */
+    private function get_topic_labels($raw) {
+        if (empty($raw)) return array();
+        if (!is_array($raw)) $raw = array($raw);
+        $choices = $this->get_topic_choices();
+        $labels = array();
+        foreach ($raw as $v) {
+            if (is_array($v) && isset($v['value'])) $v = $v['value'];
+            if (!is_scalar($v) || $v === '') continue;
+            $v = (string) $v;
+            $label = isset($choices[$v]) ? $choices[$v] : $v;
+            $labels[$label] = $label;
+        }
+        return array_values($labels);
+    }
+
+    /**
+     * Convert a raw topics_of_interest value into a flat array of choice values (slugs).
+     */
+    private function get_topic_values($raw) {
+        if (empty($raw)) return array();
+        if (!is_array($raw)) $raw = array($raw);
+        $choices = $this->get_topic_choices();
+        $vals = array();
+        foreach ($raw as $v) {
+            if (is_array($v) && isset($v['value'])) $v = $v['value'];
+            if (!is_scalar($v) || $v === '') continue;
+            $v = (string) $v;
+            if (!isset($choices[$v]) && ($k = array_search($v, $choices, true)) !== false) $v = (string) $k;
+            $vals[$v] = $v;
+        }
+        return array_values($vals);
+    }
+
     private function get_user_group_ids($user_id = null) {
         if (!$user_id) $user_id = get_current_user_id();
         if (user_can($user_id, 'edit_others_workplans')) return array();
@@ -232,6 +293,36 @@ class BimonthlyReportManager {
         if (empty($allowed)) return true;
         $terms = wp_get_post_terms($post_id, 'group', array('fields' => 'ids'));
         return !empty(array_intersect($terms, $allowed));
+    }
+
+    /**
+     * Can the user read this work plan? Unrestricted users (edit_others_workplans) always can;
+     * everyone else only for plans tagged with one of their groups.
+     */
+    private function user_can_read_workplan($workplan_id, $user_id = null) {
+        $workplan_id = intval($workplan_id);
+        if (!$workplan_id || get_post_type($workplan_id) !== 'workplan') return false;
+        $allowed = $this->get_user_group_ids($user_id);
+        if (empty($allowed)) return true;
+        $terms = wp_get_post_terms($workplan_id, 'group', array('fields' => 'ids'));
+        return !is_wp_error($terms) && !empty(array_intersect($terms, $allowed));
+    }
+
+    /**
+     * Verify the work plan -> goal -> objective chain sent by the picker, and that the user may read the plan.
+     * Pass 0 for levels not yet chosen.
+     */
+    private function picker_chain_ok($workplan_id, $goal_id = 0, $objective_id = 0) {
+        if (!$this->user_can_read_workplan($workplan_id)) return false;
+        if ($goal_id) {
+            $goals = get_field('related_work_plan_goals', intval($workplan_id), false);
+            if (empty($goals) || !is_array($goals) || !in_array(intval($goal_id), array_map('intval', $goals), true)) return false;
+            if ($objective_id) {
+                $objs = get_field('work_plan_objectives', intval($goal_id), false);
+                if (empty($objs) || !is_array($objs) || !in_array(intval($objective_id), array_map('intval', $objs), true)) return false;
+            }
+        }
+        return true;
     }
 
     // =========================================================================
@@ -433,16 +524,23 @@ class BimonthlyReportManager {
         $pid    = intval($_POST['post_id']);
         $period = sanitize_text_field($_POST['period']);
         $year   = intval($_POST['year']);
+        $title  = isset($_POST['title']) ? sanitize_text_field(wp_unslash($_POST['title'])) : '';
 
         if (!$this->user_can_access_bimonthly($pid)) wp_send_json_error('Insufficient permissions');
+        if (get_post_type($pid) !== 'bimonthly') wp_send_json_error('Update not found');
         if (empty($period) || !isset(self::$periods[$period])) wp_send_json_error('Invalid period');
         if ($year < 2020 || $year > 2040) wp_send_json_error('Invalid year');
+
+        if ($title !== '' && $title !== get_the_title($pid)) {
+            $res = wp_update_post(array('ID' => $pid, 'post_title' => $title), true);
+            if (is_wp_error($res)) wp_send_json_error('Failed to save title');
+        }
 
         update_post_meta($pid, '_brm_period', $period);
         update_post_meta($pid, '_brm_year', $year);
 
         $ranges = $this->get_period_ranges($pid);
-        wp_send_json_success(array('period' => $ranges));
+        wp_send_json_success(array('period' => $ranges, 'title' => get_the_title($pid)));
     }
 
     // =========================================================================
@@ -549,7 +647,7 @@ class BimonthlyReportManager {
                     'output_index' => intval($out['output_index']),
                     'workplan_title' => '', 'goal_title' => '', 'goal_letter' => '',
                     'objective_title' => '', 'objective_number' => '',
-                    'output_letter' => '', 'output_desc' => '',
+                    'output_letter' => '', 'output_desc' => '', 'topics' => array(), 'topic_values' => array(),
                 );
 
                 if ($o['workplan_id']) { $wp = get_post($o['workplan_id']); $o['workplan_title'] = $wp ? $wp->post_title : ''; }
@@ -566,6 +664,8 @@ class BimonthlyReportManager {
                     if (!empty($outs) && isset($outs[$o['output_index']])) {
                         $o['output_letter'] = isset($outs[$o['output_index']]['output_letter']) ? $outs[$o['output_index']]['output_letter'] : '';
                         $o['output_desc'] = isset($outs[$o['output_index']]['output_description']) ? $outs[$o['output_index']]['output_description'] : '';
+                        $o['topics'] = $this->get_topic_labels(isset($outs[$o['output_index']]['topics_of_interest']) ? $outs[$o['output_index']]['topics_of_interest'] : null);
+                        $o['topic_values'] = $this->get_topic_values(isset($outs[$o['output_index']]['topics_of_interest']) ? $outs[$o['output_index']]['topics_of_interest'] : null);
                     }
                 }
                 $outputs_hydrated[] = $o;
@@ -650,7 +750,13 @@ class BimonthlyReportManager {
         check_ajax_referer('brm_nonce', 'nonce');
         $bid = intval($_POST['bimonthly_id']);
         $args = array('post_type' => 'workplan', 'posts_per_page' => -1, 'post_status' => 'publish', 'orderby' => 'title', 'order' => 'ASC');
+        if ($bid && !$this->user_can_access_bimonthly($bid)) wp_send_json_error('Insufficient permissions');
         $bg = wp_get_post_terms($bid, 'group', array('fields' => 'ids'));
+        $bg = is_wp_error($bg) ? array() : $bg;
+        // Restricted users only ever see work plans from their own groups
+        $allowed = $this->get_user_group_ids();
+        if (!empty($allowed)) $bg = !empty($bg) ? array_values(array_intersect($bg, $allowed)) : array_values($allowed);
+        if (!empty($allowed) && empty($bg)) wp_send_json_success(array());
         if (!empty($bg)) $args['tax_query'] = array(array('taxonomy' => 'group', 'field' => 'term_id', 'terms' => $bg));
         $posts = get_posts($args);
         $r = array();
@@ -660,6 +766,7 @@ class BimonthlyReportManager {
 
     public function ajax_get_goals() {
         check_ajax_referer('brm_nonce', 'nonce');
+        if (!$this->picker_chain_ok(intval($_POST['workplan_id']))) wp_send_json_error('Insufficient permissions');
         $ids = get_field('related_work_plan_goals', intval($_POST['workplan_id']), false);
         $r = array();
         if (!empty($ids)) {
@@ -675,6 +782,8 @@ class BimonthlyReportManager {
 
     public function ajax_get_objectives() {
         check_ajax_referer('brm_nonce', 'nonce');
+        $wid = isset($_POST['workplan_id']) ? intval($_POST['workplan_id']) : 0;
+        if (!$this->picker_chain_ok($wid, intval($_POST['goal_id']))) wp_send_json_error('Insufficient permissions');
         $ids = get_field('work_plan_objectives', intval($_POST['goal_id']), false);
         $r = array();
         if (!empty($ids)) {
@@ -690,16 +799,66 @@ class BimonthlyReportManager {
 
     public function ajax_get_outputs() {
         check_ajax_referer('brm_nonce', 'nonce');
+        $wid = isset($_POST['workplan_id']) ? intval($_POST['workplan_id']) : 0;
+        $gid = isset($_POST['goal_id']) ? intval($_POST['goal_id']) : 0;
+        if (!$this->picker_chain_ok($wid, $gid, intval($_POST['objective_id']))) wp_send_json_error('Insufficient permissions');
         $outputs = get_field('objective_outputs', intval($_POST['objective_id']));
         $r = array();
         if (!empty($outputs)) {
             foreach ($outputs as $i => $o) {
                 $l = isset($o['output_letter']) ? $o['output_letter'] : '';
                 $d = isset($o['output_description']) ? $o['output_description'] : '';
-                $r[] = array('index' => $i, 'title' => $l ? $l.': '.wp_trim_words($d, 20) : wp_trim_words($d, 20));
+                $r[] = array(
+                    'index' => $i,
+                    'title' => $l ? $l.': '.wp_trim_words($d, 20) : wp_trim_words($d, 20),
+                    'topics' => $this->get_topic_labels(isset($o['topics_of_interest']) ? $o['topics_of_interest'] : null),
+                    'topic_values' => $this->get_topic_values(isset($o['topics_of_interest']) ? $o['topics_of_interest'] : null),
+                );
             }
         }
         wp_send_json_success($r);
+    }
+
+    /**
+     * Update the Topics of Interest of one work plan output from the item dialog.
+     * This writes to the work plan itself, so every report showing that output picks it up.
+     */
+    public function ajax_save_output_topics() {
+        check_ajax_referer('brm_nonce', 'nonce');
+        if (!current_user_can('edit_bimonthly_updates')) wp_send_json_error('Insufficient permissions');
+        $wid = intval($_POST['workplan_id'] ?? 0);
+        $gid = intval($_POST['goal_id'] ?? 0);
+        $oid = intval($_POST['objective_id'] ?? 0);
+        $idx = isset($_POST['output_index']) ? intval($_POST['output_index']) : -1;
+        if (!$wid || !$gid || !$oid || $idx < 0) wp_send_json_error('Invalid output');
+        if (!$this->picker_chain_ok($wid, $gid, $oid)) wp_send_json_error('Insufficient permissions');
+
+        $choices = $this->get_topic_choices();
+        if (empty($choices)) wp_send_json_error('Topics of Interest field is not available');
+        $posted = isset($_POST['topics']) && is_array($_POST['topics']) ? array_map('sanitize_text_field', wp_unslash($_POST['topics'])) : array();
+        $topics = array_values(array_intersect(array_map('strval', array_keys($choices)), $posted));
+
+        if (function_exists('acf_get_field')) acf_get_field('objective_outputs'); // make ACF resolve the repeater
+        $rows = get_field('objective_outputs', $oid);
+        if (!is_array($rows) || !isset($rows[$idx])) wp_send_json_error('Output not found');
+
+        // Rewrite the repeater by name (same as the Work Plan Manager does). update_sub_field() can't
+        // resolve this field's stored reference, so it reports success without saving.
+        $new_rows = array();
+        foreach ($rows as $i => $row) {
+            $new_rows[] = array(
+                'output_letter'      => isset($row['output_letter']) ? $row['output_letter'] : '',
+                'output_description' => isset($row['output_description']) ? $row['output_description'] : '',
+                'topics_of_interest' => $i === $idx ? $topics : $this->get_topic_values(isset($row['topics_of_interest']) ? $row['topics_of_interest'] : null),
+            );
+        }
+        update_field('objective_outputs', $new_rows, $oid);
+
+        // Verify what was stored
+        $stored = maybe_unserialize(get_post_meta($oid, 'objective_outputs_' . $idx . '_topics_of_interest', true));
+        $stored = $this->get_topic_values($stored);
+        if ($stored !== $topics) wp_send_json_error('Could not save topics');
+        wp_send_json_success(array('topic_values' => $topics, 'topics' => $this->get_topic_labels($topics)));
     }
 
     // =========================================================================
@@ -773,6 +932,24 @@ class BimonthlyReportManager {
         $summary = sanitize_textarea_field($_POST['summary']);
         $post_type = get_post_type($pid);
 
+        $report_id = isset($_POST['report_id']) ? intval($_POST['report_id']) : 0;
+
+        if (!$pid || !$post_type) wp_send_json_error('Post not found');
+        if (!current_user_can('edit_bimonthly_updates') || !$this->user_can_access_bimonthly($report_id)) wp_send_json_error('Insufficient permissions');
+        if (get_post_type($report_id) !== 'bimonthly') wp_send_json_error('Update not found');
+
+        // The post must be an item in that report
+        $in_report = false;
+        foreach (array('_brm_prior_items', '_brm_ahead_items') as $key) {
+            $raw = json_decode((string) get_post_meta($report_id, $key, true), true);
+            if (is_array($raw)) {
+                foreach ($raw as $item) {
+                    if (isset($item['post_id']) && intval($item['post_id']) === $pid) { $in_report = true; break 2; }
+                }
+            }
+        }
+        if (!$in_report) wp_send_json_error('This item is not part of the selected update');
+
         if ($post_type === 'bimonthly-highlight') {
             // Save to highlight_text
             if (function_exists('update_field')) update_field('highlight_text', $summary, $pid);
@@ -782,6 +959,37 @@ class BimonthlyReportManager {
             else update_post_meta($pid, 'internal_reporting_summary', $summary);
         }
         wp_send_json_success(array('summary' => $summary));
+    }
+
+    /**
+     * Rename a bi-monthly highlight from inside a report. Only highlights that are actually
+     * part of the given report can be renamed, and only by users who can access that report.
+     */
+    public function ajax_save_title() {
+        check_ajax_referer('brm_nonce', 'nonce');
+        $report_id = intval($_POST['report_id']);
+        $pid = intval($_POST['post_id']);
+        $title = sanitize_text_field(wp_unslash($_POST['title']));
+
+        if (!current_user_can('edit_bimonthly_updates') || !$this->user_can_access_bimonthly($report_id)) wp_send_json_error('Insufficient permissions');
+        if (get_post_type($report_id) !== 'bimonthly') wp_send_json_error('Update not found');
+        if (get_post_type($pid) !== 'bimonthly-highlight') wp_send_json_error('Only highlights can be renamed here');
+        if ($title === '') wp_send_json_error('Title is required');
+
+        $in_report = false;
+        foreach (array('_brm_prior_items', '_brm_ahead_items') as $key) {
+            $raw = json_decode((string) get_post_meta($report_id, $key, true), true);
+            if (is_array($raw)) {
+                foreach ($raw as $item) {
+                    if (isset($item['post_id']) && intval($item['post_id']) === $pid) { $in_report = true; break 2; }
+                }
+            }
+        }
+        if (!$in_report) wp_send_json_error('This highlight is not part of the selected update');
+
+        $res = wp_update_post(array('ID' => $pid, 'post_title' => $title), true);
+        if (is_wp_error($res)) wp_send_json_error('Failed to save title');
+        wp_send_json_success(array('title' => get_the_title($pid)));
     }
 
     // =========================================================================
@@ -1021,7 +1229,9 @@ class BimonthlyReportManager {
                                 if (!empty($o['goal_letter'])) $path .= $o['goal_letter'] . '.';
                                 if (!empty($o['objective_number'])) $path .= $o['objective_number'] . '.';
                                 if (!empty($o['output_letter'])) $path .= $o['output_letter'] . '.';
-                                $parts[] = ($path ? $path . ' ' : '') . $o['output_desc'];
+                                $part = ($path ? $path . ' ' : '') . $o['output_desc'];
+                                if (!empty($o['topics'])) $part .= ' (Topics: ' . implode(', ', $o['topics']) . ')';
+                                $parts[] = $part;
                             }
                         }
                         if (!empty($parts)) {
@@ -1110,6 +1320,7 @@ class BimonthlyReportManager {
             .brm-conn-section { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 2px; }
             .brm-conn-output { font-size: 12px; color: #1a3a5c; margin: 3px 0 3px 8px; line-height: 1.4; }
             .brm-conn-output-path { font-weight: 600; }
+            .brm-conn-output-topics { font-size: 11px; color: #555; font-style: italic; }
             .brm-conn-no-outputs { font-size: 12px; color: #999; font-style: italic; margin-left: 8px; }
         </style>';
 
@@ -1128,6 +1339,7 @@ class BimonthlyReportManager {
                     echo '<div class="brm-conn-output">';
                     if ($path) echo '<span class="brm-conn-output-path">' . esc_html($path) . '</span> ';
                     echo esc_html($o['output_desc']);
+                    if (!empty($o['topics'])) echo '<div class="brm-conn-output-topics">Topics: ' . esc_html(implode(', ', $o['topics'])) . '</div>';
                     echo '</div>';
                 }
             } else {
@@ -1182,7 +1394,7 @@ class BimonthlyReportManager {
                     foreach ($outputs_raw as $out) {
                         $o = array(
                             'goal_letter' => '', 'objective_number' => '',
-                            'output_letter' => '', 'output_desc' => '',
+                            'output_letter' => '', 'output_desc' => '', 'topics' => array(),
                         );
 
                         if (!empty($out['goal_id'])) {
@@ -1195,6 +1407,7 @@ class BimonthlyReportManager {
                             if (!empty($outs) && isset($outs[$idx])) {
                                 $o['output_letter'] = isset($outs[$idx]['output_letter']) ? $outs[$idx]['output_letter'] : '';
                                 $o['output_desc'] = isset($outs[$idx]['output_description']) ? $outs[$idx]['output_description'] : '';
+                                $o['topics'] = $this->get_topic_labels(isset($outs[$idx]['topics_of_interest']) ? $outs[$idx]['topics_of_interest'] : null);
                             }
                         }
                         $hydrated_outputs[] = $o;
@@ -1257,7 +1470,9 @@ class BimonthlyReportManager {
                                         if (!empty($o['goal_letter'])) $path .= $o['goal_letter'] . '.';
                                         if (!empty($o['objective_number'])) $path .= $o['objective_number'] . '.';
                                         if (!empty($o['output_letter'])) $path .= $o['output_letter'] . '.';
-                                        $parts[] = ($path ? $path . ' ' : '') . $o['output_desc'];
+                                        $part = ($path ? $path . ' ' : '') . $o['output_desc'];
+                                        if (!empty($o['topics'])) $part .= ' (Topics: ' . implode(', ', $o['topics']) . ')';
+                                        $parts[] = $part;
                                     }
                                 }
                                 echo esc_html(implode('; ', $parts) ?: '—');
