@@ -24,6 +24,7 @@
             $('#brm-new-report').on('click', function() { self.showNewModal(); });
             $('#brm-new-modal-close, #brm-new-cancel').on('click', function() { self.hideNewModal(); });
             $('#brm-new-save').on('click', function() { self.createReport(); });
+            $('input[name="brm-new-type"]').on('change', function() { self.toggleNewType(); });
             $('#brm-delete-report').on('click', function() { self.deleteReport(); });
             $('#brm-export-pdf').on('click', function() { self.exportPdf(); });
 
@@ -223,19 +224,35 @@
         // New / Delete update
         // =====================================================================
 
-        showNewModal: function() { $('#brm-new-title').val(''); $('#brm-new-group').val(''); $('#brm-new-period').val(''); $('#brm-new-modal-overlay').show(); },
+        showNewModal: function() {
+            $('#brm-new-title').val(''); $('#brm-new-group').val(''); $('#brm-new-period').val(''); $('#brm-new-anchor').val('');
+            $('input[name="brm-new-type"][value="bimonthly"]').prop('checked', true);
+            this.toggleNewType();
+            $('#brm-new-modal-overlay').show();
+        },
+        toggleNewType: function() {
+            var q = $('input[name="brm-new-type"]:checked').val() === 'quarterly';
+            $('#brm-new-quarter-row').toggle(q);
+            $('#brm-new-bimonthly-row').toggle(!q);
+            $('#brm-new-title').attr('placeholder', q ? 'e.g. Q1 2026' : 'e.g. January–February 2026');
+            $('#brm-new-title-note').text('“' + (q ? 'Quarterly' : 'Bi-Monthly') + ' Report –” is added to the title if it isn\'t already included.');
+        },
         hideNewModal: function() { $('#brm-new-modal-overlay').hide(); },
 
         createReport: function() {
             var self = this, title = $('#brm-new-title').val().trim();
+            var type = $('input[name="brm-new-type"]:checked').val();
             var period = $('#brm-new-period').val();
             var year = $('#brm-new-year').val();
+            var anchor = $('#brm-new-anchor').val();
             if (!title) { alert('Please enter a title.'); return; }
-            if (!period) { alert('Please select a reporting period.'); return; }
+            if (type === 'quarterly') {
+                if (!anchor) { alert('Please select a report date.'); return; }
+            } else if (!period) { alert('Please select a reporting period.'); return; }
             $.post(brm_ajax.ajax_url, {
                 action: 'brm_create_bimonthly', nonce: brm_ajax.nonce,
                 title: title, group: $('#brm-new-group').val(),
-                period: period, year: year
+                report_type: type, period: period, year: year, anchor: anchor
             }, function(res) {
                 if (res.success) { self.hideNewModal(); self.loadReportList(); self.loadReport(res.data.id); }
                 else alert('Error: ' + (res.data || ''));
@@ -271,7 +288,11 @@
             var $editYear = $('#brm-edit-year-select');
 
             // Reset
-                       if (this.currentPeriod) {
+            var isQ = this.currentPeriod && this.currentPeriod.type === 'quarterly';
+            $('#brm-edit-anchor-input').toggle(!!isQ).val(isQ ? this.currentPeriod.anchor : '');
+            $editPeriod.toggle(!isQ); $editYear.toggle(!isQ);
+            if (isQ) {
+            } else if (this.currentPeriod) {
                 $editPeriod.val(this.currentPeriod.period_key);
                 $editYear.val(this.currentPeriod.year);
             } else {
@@ -299,7 +320,10 @@
             var title = $.trim($('#brm-edit-title-input').val());
 
             if (!title) { alert('Please enter a title.'); return; }
-            if (!period) { alert('Please select a period.'); return; }
+            var isQ = this.currentPeriod && this.currentPeriod.type === 'quarterly';
+            var anchor = $('#brm-edit-anchor-input').val();
+            if (isQ) { if (!anchor) { alert('Please select a date.'); return; } }
+            else if (!period) { alert('Please select a period.'); return; }
 
             $('#brm-save-period').prop('disabled', true).text('Saving…');
 
@@ -309,7 +333,8 @@
                 post_id: this.currentReportId,
                 title: title,
                 period: period,
-                year: year
+                year: year,
+                anchor: anchor
             }, function(res) {
                 $('#brm-save-period').prop('disabled', false).text('Save');
                 if (res.success) {

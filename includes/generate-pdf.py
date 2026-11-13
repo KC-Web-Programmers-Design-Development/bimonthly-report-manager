@@ -162,13 +162,14 @@ def build_cover_page(data, styles):
 
     # Subhead: center name (group taxonomy)
     group_name = data.get('group_name', '')
+    type_label = data.get('report_type_label', 'Bi-Monthly')
     if group_name:
         elements.append(Paragraph(
-            '{0} &ndash; Bi-Monthly Update'.format(group_name),
+            '{0} &ndash; {1} Update'.format(group_name, type_label),
             styles['CoverSubtitle']
         ))
     else:
-        elements.append(Paragraph('Bi-Monthly Update', styles['CoverSubtitle']))
+        elements.append(Paragraph('{0} Update'.format(type_label), styles['CoverSubtitle']))
 
     # Update title (the post title, e.g. "March-April 2026")
     elements.append(Spacer(1, 0.3 * inch))
@@ -292,7 +293,7 @@ def build_meta_cover_page(data, styles):
 
     network_title = data.get('network_title', 'Bi-Monthly Update')
     elements.append(Paragraph(network_title, styles['CoverTitle']))
-    elements.append(Paragraph('Bi-Monthly Network Update', styles['CoverSubtitle']))
+    elements.append(Paragraph('{0} Network Update'.format(data.get('report_type_label', 'Bi-Monthly')), styles['CoverSubtitle']))
 
     elements.append(PageBreak())
     return elements

@@ -2,6 +2,24 @@
 
 Oct 5, 2026 · @SCJ
 
+## **2.5.0 — Nov 13, 2026**
+
+Files changed: `bimonthly-report-manager.php`, `includes/admin-page.php`, `includes/generate-pdf.py`, `js/bimonthly-report-manager.js`.
+
+### **Added**
+
+* **Quarterly reports.** The New Update dialog has a Bi-Monthly / Quarterly choice. Quarterly takes a single report date: Past Highlights cover the 3 months up to that date, Future Highlights the 3 months after it (stored as `_brm_type` and `_brm_anchor`). Bi-monthly behaves as before.
+* **Titles reflect the type.** "Quarterly Report – " or "Bi-Monthly Report – " is prefixed when the title doesn't already say so.
+* **PDF covers** say Quarterly or Bi-Monthly; the Meta Report cover follows the selected updates (all quarterly, all bi-monthly, or "Bi-Monthly and Quarterly").
+
+### **Changed**
+
+* Plugin renamed Bimonthly and Quarterly Report Manager (display names only; slug, post type and capability unchanged).
+
+### **Notes**
+
+* No database changes; existing reports are treated as bi-monthly. Quarterly reports are not covered by Window Audit.
+
 ## **2.4.1 — Oct 19, 2026**
 
 Upgrades from 2.3.6. Files changed: `bimonthly-report-manager.php`, `includes/admin-page.php`, `includes/generate-pdf.py`, `css/bimonthly-report-manager.css`, `js/bimonthly-report-manager.js`. New: `includes/window-audit-page.php`.

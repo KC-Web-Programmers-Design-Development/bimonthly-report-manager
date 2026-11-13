@@ -1,6 +1,6 @@
 <?php if (!defined('ABSPATH')) exit; ?>
 <div class="wrap" id="brm-app">
-    <h1>Bimonthly Update Manager</h1>
+    <h1>Bimonthly and Quarterly Update Manager</h1>
 
     <div id="brm-container">
         <div id="brm-sidebar">
@@ -12,7 +12,7 @@
         </div>
 
         <div id="brm-editor">
-            <div id="brm-no-selection"><p>Select a bimonthly update from the list, or create a new one.</p></div>
+            <div id="brm-no-selection"><p>Select an update from the list, or create a new one.</p></div>
 
             <div id="brm-editor-content" style="display:none;">
                 <div class="brm-editor-header">
@@ -22,6 +22,7 @@
                     <button type="button" id="brm-edit-period" class="button button-small" title="Edit title and period">✎</button>
                     <div id="brm-period-editor" style="display:none;">
                          <input type="text" id="brm-edit-title-input" class="regular-text" placeholder="Update title" maxlength="200" />
+                         <input type="date" id="brm-edit-anchor-input" style="display:none;" />
                          <select id="brm-edit-period-select">
                             <option value="">— Period —</option>
                             <?php foreach (BimonthlyReportManager::get_periods() as $key => $p) : ?>
@@ -153,15 +154,26 @@
     <div id="brm-new-modal-overlay" style="display:none;">
         <div id="brm-new-modal">
             <div class="brm-modal-header">
-                <h3>New Bimonthly Update</h3>
+                <h3>New Update</h3>
                 <button id="brm-new-modal-close" class="brm-close">&times;</button>
             </div>
             <div class="brm-modal-body">
                 <div class="brm-field-row">
+                    <label>Report Type</label>
+                    <label style="display:inline-block;margin-right:16px;"><input type="radio" name="brm-new-type" value="bimonthly" checked> Bi-Monthly</label>
+                    <label style="display:inline-block;"><input type="radio" name="brm-new-type" value="quarterly"> Quarterly</label>
+                </div>
+                <div class="brm-field-row">
                     <label for="brm-new-title">Update Title</label>
                     <input type="text" id="brm-new-title" placeholder="e.g. January–February 2026">
+                    <p class="description" id="brm-new-title-note" style="margin:4px 0 0;">“Bi-Monthly Report –” is added to the title if it isn't already included.</p>
                 </div>
-                <div class="brm-field-row brm-field-row-inline">
+                <div class="brm-field-row" id="brm-new-quarter-row" style="display:none;">
+                    <label for="brm-new-anchor">Report Date</label>
+                    <input type="date" id="brm-new-anchor">
+                    <p class="description" style="margin:4px 0 0;">Past highlights cover the 3 months up to this date; future highlights cover the 3 months after it.</p>
+                </div>
+                <div class="brm-field-row brm-field-row-inline" id="brm-new-bimonthly-row">
                     <div>
                         <label for="brm-new-period">Reporting Period</label>
                         <select id="brm-new-period">
