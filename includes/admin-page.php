@@ -19,24 +19,15 @@
                     <h2 id="brm-report-title"></h2>
                     <span id="brm-report-group" class="brm-badge"></span>
                     <span id="brm-report-period" class="brm-badge brm-badge-period"></span>
+                    <span id="brm-report-variant" class="brm-badge"></span>
                     <button type="button" id="brm-edit-period" class="button button-small" title="Edit title and period">✎</button>
                     <div id="brm-period-editor" style="display:none;">
                          <input type="text" id="brm-edit-title-input" class="regular-text" placeholder="Update title" maxlength="200" />
-                         <input type="date" id="brm-edit-anchor-input" style="display:none;" />
-                         <select id="brm-edit-period-select">
-                            <option value="">— Period —</option>
-                            <?php foreach (BimonthlyReportManager::get_periods() as $key => $p) : ?>
-                                <option value="<?php echo esc_attr($key); ?>"><?php echo esc_html($p['short'] . ' (' . $p['span'] . ')'); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <select id="brm-edit-year-select">
-                            <?php
-                            $cy = intval(date('Y'));
-                            for ($y = $cy + 1; $y >= $cy - 3; $y--) {
-                                printf('<option value="%d">%d</option>', $y, $y);
-                            }
-                            ?>
-                        </select>
+                         <input type="date" id="brm-edit-anchor-input" title="Report date" />
+                         <span class="brm-variant-radios">
+                            <label><input type="radio" name="brm-edit-variant" value="standard" checked> Standard Report</label>
+                            <label><input type="radio" name="brm-edit-variant" value="supplemental"> Supplemental Report</label>
+                         </span>
                         <button type="button" id="brm-save-period" class="button button-primary button-small">Save</button>
                         <button type="button" id="brm-cancel-period" class="button button-small">Cancel</button>
                     </div>
@@ -168,33 +159,16 @@
                     <input type="text" id="brm-new-title" placeholder="e.g. January–February 2026">
                     <p class="description" id="brm-new-title-note" style="margin:4px 0 0;">“Bi-Monthly Report –” is added to the title if it isn't already included.</p>
                 </div>
-                <div class="brm-field-row" id="brm-new-quarter-row" style="display:none;">
+                <div class="brm-field-row" id="brm-new-quarter-row">
                     <label for="brm-new-anchor">Report Date</label>
                     <input type="date" id="brm-new-anchor">
-                    <p class="description" style="margin:4px 0 0;">Past highlights cover the 3 months up to this date; future highlights cover the 3 months after it.</p>
+                    <p class="description" id="brm-new-anchor-note" style="margin:4px 0 0;"></p>
                 </div>
-                <div class="brm-field-row brm-field-row-inline" id="brm-new-bimonthly-row">
-                    <div>
-                        <label for="brm-new-period">Reporting Period</label>
-                        <select id="brm-new-period">
-                            <option value="">— Select period —</option>
-                            <?php foreach (BimonthlyReportManager::get_periods() as $key => $p) : ?>
-                                <option value="<?php echo esc_attr($key); ?>"><?php echo esc_html($p['label'] . ' (' . $p['span'] . ')'); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="brm-new-year">Year</label>
-                        <select id="brm-new-year">
-                            <?php
-                            $current_year = intval(date('Y'));
-                            for ($y = $current_year + 1; $y >= $current_year - 3; $y--) {
-                                $sel = ($y === $current_year) ? ' selected' : '';
-                                printf('<option value="%d"%s>%d</option>', $y, $sel, $y);
-                            }
-                            ?>
-                        </select>
-                    </div>
+                <div class="brm-field-row">
+                    <label>Report Variant</label>
+                    <label style="display:inline-block;margin-right:16px;"><input type="radio" name="brm-new-variant" value="standard" checked> Standard Report</label>
+                    <label style="display:inline-block;"><input type="radio" name="brm-new-variant" value="supplemental"> Supplemental Report</label>
+                    <p class="description" style="margin:4px 0 0;">Printed under the title on the PDF cover page.</p>
                 </div>
                 <div class="brm-field-row">
                     <label for="brm-new-group">Group</label>

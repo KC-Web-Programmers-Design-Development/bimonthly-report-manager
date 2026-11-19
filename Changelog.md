@@ -2,6 +2,16 @@
 
 Oct 5, 2026 · @SCJ
 
+## **2.6.1 — Nov 19, 2026**
+
+Files changed: `bimonthly-report-manager.php`, `includes/admin-page.php`, `includes/generate-pdf.py`, `includes/meta-report-page.php`, `js/bimonthly-report-manager.js`, `css/bimonthly-report-manager.css`.
+
+### **Added**
+
+* **Date-anchored Bi-Monthly reports.** Bi-Monthly now uses the same single Report Date as Quarterly: Past Highlights cover the 2 months up to the date, Future Highlights the 2 months after it (Quarterly stays at 3). The Reporting Period / Year dropdowns are gone. Existing period/year posts keep their windows until edited; the date picker is prefilled with their pivot date and saving converts them.
+* **Standard / Supplemental Report** radio on New Update and in the edit controls (stored as `_brm_variant`, default Standard). Shown as a badge in the editor and printed under the title on the PDF cover.
+* **Meta Report filters:** Region, report variant (Standard/Supplemental) and report type (Bi-Monthly/Quarterly), combined with the date range. "Select all shown", "Clear selection" and "Reset filters" links; selections now survive filter changes.
+
 ## **2.5.0 — Nov 13, 2026**
 
 Files changed: `bimonthly-report-manager.php`, `includes/admin-page.php`, `includes/generate-pdf.py`, `js/bimonthly-report-manager.js`.

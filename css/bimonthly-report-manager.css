@@ -544,3 +544,6 @@
     color: #2c3338;
     margin: 2px 0;
 }
+
+.brm-variant-radios { display: inline-flex; gap: 12px; margin: 0 6px; }
+.brm-variant-radios label { white-space: nowrap; }

@@ -1,6 +1,6 @@
 # Bimonthly and Quarterly Report Manager
 
-**Version:** 2.5.0
+**Version:** 2.6.1
 **Author:** KC Web Programmers
 **Text domain:** `bimonthly-report-manager`
 

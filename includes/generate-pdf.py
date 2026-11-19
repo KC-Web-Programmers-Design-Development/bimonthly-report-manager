@@ -175,6 +175,11 @@ def build_cover_page(data, styles):
     elements.append(Spacer(1, 0.3 * inch))
     elements.append(Paragraph(data.get('title', ''), styles['CoverSubtitle']))
 
+    # Standard / Supplemental Report, directly under the title
+    variant_label = data.get('report_variant_label', '')
+    if variant_label:
+        elements.append(Paragraph(variant_label, styles['CoverSubtitle']))
+
     elements.append(PageBreak())
     return elements
 

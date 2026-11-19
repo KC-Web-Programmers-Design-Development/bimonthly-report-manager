@@ -20,6 +20,37 @@ if (!defined('ABSPATH')) exit;
                 </div>
             </div>
 
+            <div class="brm-meta-filters">
+                <div class="brm-filter-grid">
+                    <div>
+                        <label for="brm-meta-f-group">Region</label>
+                        <select id="brm-meta-f-group"><option value="">All regions</option></select>
+                    </div>
+                    <div>
+                        <label for="brm-meta-f-variant">Report variant</label>
+                        <select id="brm-meta-f-variant">
+                            <option value="">Standard and Supplemental</option>
+                            <option value="standard">Standard only</option>
+                            <option value="supplemental">Supplemental only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="brm-meta-f-type">Report type</label>
+                        <select id="brm-meta-f-type">
+                            <option value="">Bi-Monthly and Quarterly</option>
+                            <option value="bimonthly">Bi-Monthly only</option>
+                            <option value="quarterly">Quarterly only</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="brm-filter-bar">
+                    <span id="brm-meta-shown"></span>
+                    <a href="#" id="brm-meta-select-shown">Select all shown</a> ·
+                    <a href="#" id="brm-meta-select-none">Clear selection</a> ·
+                    <a href="#" id="brm-meta-reset">Reset filters</a>
+                </p>
+            </div>
+
             <div id="brm-meta-list">
                 <p class="brm-loading">Loading updates…</p>
             </div>
@@ -96,6 +127,11 @@ if (!defined('ABSPATH')) exit;
     color: #555;
 }
 
+.brm-filter-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.brm-filter-grid label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; color: #555; }
+.brm-filter-grid select { width: 100%; }
+.brm-filter-bar { margin: 10px 0 0; font-size: 12px; color: #555; }
+.brm-filter-bar #brm-meta-shown { margin-right: 10px; font-weight: 600; }
 .brm-date-range {
     display: flex;
     align-items: center;
@@ -364,20 +400,39 @@ if (!defined('ABSPATH')) exit;
             if (!res.success) return;
             allUpdates = res.data;
             allUpdates.sort(function(a, b) { return a.region - b.region; });
+            fillGroupFilter();
             renderUpdateList();
         });
     }
 
+    function fillGroupFilter() {
+        var seen = {}, groups = [];
+        allUpdates.forEach(function(u) { if (!seen[u.group]) { seen[u.group] = 1; groups.push({ name: u.group, region: u.region }); } });
+        groups.sort(function(a, b) { return a.region - b.region || a.name.localeCompare(b.name); });
+        var $sel = $('#brm-meta-f-group');
+        groups.forEach(function(g) {
+            $sel.append($('<option>').val(g.name).text(g.name + (g.region < 99 ? ' (Region ' + g.region + ')' : '')));
+        });
+    }
+
     function renderUpdateList() {
-        var $list = $('#brm-meta-list').empty();
+        var $list = $('#brm-meta-list');
+        var keep = {};
+        $('.brm-meta-check:checked').each(function() { keep[$(this).val()] = true; });
+        $list.empty();
+
         var fromDate = $('#brm-meta-date-from').val();
         var toDate = $('#brm-meta-date-to').val();
+        var fGroup = $('#brm-meta-f-group').val();
+        var fVariant = $('#brm-meta-f-variant').val();
+        var fType = $('#brm-meta-f-type').val();
 
         if (allUpdates.length === 0) {
             $list.html('<p>No updates found.</p>');
             return;
         }
 
+        var shown = 0;
         allUpdates.forEach(function(u) {
             // Parse the date for filtering (stored as m/d/Y)
             var parts = u.date.split('/');
@@ -386,14 +441,20 @@ if (!defined('ABSPATH')) exit;
             var hidden = false;
             if (fromDate && itemDate < fromDate) hidden = true;
             if (toDate && itemDate > toDate) hidden = true;
+            if (fGroup && u.group !== fGroup) hidden = true;
+            if (fVariant && u.variant !== fVariant) hidden = true;
+            if (fType && u.type !== fType) hidden = true;
+            if (!hidden) shown++;
 
             var regionLabel = u.region < 99 ? 'Region ' + u.region : 'Unknown';
+            var tags = (u.type === 'quarterly' ? 'Quarterly' : 'Bi-Monthly') + ' · ' + (u.variant === 'supplemental' ? 'Supplemental' : 'Standard');
             var $item = $(
                 '<div class="brm-meta-item' + (hidden ? ' brm-hidden' : '') + '" data-date="' + esc(itemDate) + '">' +
-                    '<input type="checkbox" class="brm-meta-check" value="' + u.id + '" id="brm-meta-' + u.id + '"' + (hidden ? ' disabled' : '') + '>' +
+                    '<input type="checkbox" class="brm-meta-check" value="' + u.id + '" id="brm-meta-' + u.id + '"' + (hidden ? ' disabled' : '') + (keep[u.id] && !hidden ? ' checked' : '') + '>' +
                     '<label for="brm-meta-' + u.id + '">' +
                         '<span class="brm-meta-group">' + esc(u.group) + '</span> — ' +
-                        '<span class="brm-meta-date">' + esc(u.title) + ' (' + esc(u.date) + ')</span>' +
+                        '<span class="brm-meta-date">' + esc(u.title) + ' (' + esc(u.date) + ')</span> ' +
+                        '<em style="color:#777;font-size:11px;">' + esc(tags) + '</em>' +
                     '</label>' +
                     '<span class="brm-meta-region">' + esc(regionLabel) + '</span>' +
                 '</div>'
@@ -401,6 +462,7 @@ if (!defined('ABSPATH')) exit;
             $list.append($item);
         });
 
+        $('#brm-meta-shown').text(shown + ' of ' + allUpdates.length + ' shown');
         updateCount();
     }
 
@@ -436,8 +498,24 @@ if (!defined('ABSPATH')) exit;
             '&nonce=' + nonce;
     }
 
-    // Date filter change
-    $('#brm-meta-date-from, #brm-meta-date-to').on('change', function() {
+    // Filter changes
+    $('#brm-meta-date-from, #brm-meta-date-to, #brm-meta-f-group, #brm-meta-f-variant, #brm-meta-f-type').on('change', function() {
+        renderUpdateList();
+    });
+
+    $('#brm-meta-select-shown').on('click', function(e) {
+        e.preventDefault();
+        $('.brm-meta-item:not(.brm-hidden) .brm-meta-check').prop('checked', true);
+        updateCount();
+    });
+    $('#brm-meta-select-none').on('click', function(e) {
+        e.preventDefault();
+        $('.brm-meta-check').prop('checked', false);
+        updateCount();
+    });
+    $('#brm-meta-reset').on('click', function(e) {
+        e.preventDefault();
+        $('#brm-meta-date-from, #brm-meta-date-to, #brm-meta-f-group, #brm-meta-f-variant, #brm-meta-f-type').val('');
         renderUpdateList();
     });
 

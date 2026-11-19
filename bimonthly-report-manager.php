@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Bimonthly and Quarterly Report Manager
  * Description: Manage bimonthly and quarterly updates with cascading workplan output selection and date-filtered post selection
- * Version: 2.5.0
+ * Version: 2.6.1
  * Author: KC Web Programmers
  * Text Domain: bimonthly-report-manager
  */
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) exit;
 
 define('BRM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BRM_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('BRM_VERSION', '2.5.0');
+define('BRM_VERSION', '2.6.1');
 
 /**
  * On activation, grant 'edit_bimonthly_updates' to administrator.
@@ -62,7 +62,7 @@ class BimonthlyReportManager {
     }
 
     public function add_admin_menu() {
-        add_menu_page('Bimonthly and Quarterly Updates', 'Bi-Monthly & Quarterly',  'edit_bimonthly_updates', 'bimonthly-report-manager', array($this, 'admin_page'), 'dashicons-calendar-alt', 31);
+        add_menu_page('Bimonthly and Quarterly Updates', 'Bi-Monthly & Quarterly Reports',  'edit_bimonthly_updates', 'bimonthly-report-manager', array($this, 'admin_page'), 'dashicons-calendar-alt', 31);
         add_submenu_page('bimonthly-report-manager', 'Settings', 'Settings', 'manage_options', 'brm-pdf-settings', array($this, 'settings_page'));
         add_submenu_page('bimonthly-report-manager', 'Meta Report', 'Meta Report', 'edit_others_workplans', 'brm-meta-report', array($this, 'meta_report_page'));
         add_submenu_page('bimonthly-report-manager', 'Bimonthly Window Audit', 'Window Audit', 'manage_options', 'brm-window-audit', array($this, 'window_audit_page'));
@@ -382,9 +382,12 @@ class BimonthlyReportManager {
      *      Nov–Dec 2026 → Past: Oct 1 – Nov 30, 2026 / Future: Dec 1, 2026 – Jan 31, 2027
      */
     private function get_period_ranges($post_id) {
-        if (get_post_meta($post_id, '_brm_type', true) === 'quarterly') {
-            return $this->get_quarterly_ranges($post_id);
+        // Date-anchored reports (all new posts, and quarterly always): window pivots on the selected date.
+        if (get_post_meta($post_id, '_brm_anchor', true) !== '') {
+            return $this->get_anchor_ranges($post_id);
         }
+        if (get_post_meta($post_id, '_brm_type', true) === 'quarterly') return false;
+        // Legacy bimonthly posts: fixed calendar period + year.
         $period_key = get_post_meta($post_id, '_brm_period', true);
         $year = intval(get_post_meta($post_id, '_brm_year', true));
 
@@ -414,6 +417,9 @@ class BimonthlyReportManager {
                 : date('M Y', $a) . '–' . date('M Y', $b);
         };
         return array(
+            'type'         => 'bimonthly',
+            'legacy'       => true,
+            'anchor'       => date('Y-m-d', $prior_end_ts),   // pivot, used to prefill the date picker when converting
             'period_key'   => $period_key,
             'period_label' => $period['label'],
             'year'         => $year,
@@ -432,13 +438,26 @@ class BimonthlyReportManager {
         return get_post_meta($post_id, '_brm_type', true) === 'quarterly' ? 'quarterly' : 'bimonthly';
     }
 
+    /** Months either side of the selected date: 3 for quarterly, 2 for bi-monthly. */
+    private function get_window_months($post_id) {
+        return $this->get_report_type($post_id) === 'quarterly' ? 3 : 2;
+    }
+
+    /** Standard or Supplemental (printed on the PDF cover). Posts without the meta are Standard. */
+    private function get_report_variant($post_id) {
+        return get_post_meta($post_id, '_brm_variant', true) === 'supplemental' ? 'supplemental' : 'standard';
+    }
+
     /**
-     * Quarterly windows pivot on the selected date:
-     *   Past   = 3 months before the date, through the date
-     *   Future = day after the date, through 3 months after the date
-     * e.g. Mar 15, 2026 → Past: Dec 15, 2025 – Mar 15, 2026 / Future: Mar 16 – Jun 15, 2026
+     * Anchored windows pivot on the selected date (N = 3 for quarterly, 2 for bi-monthly):
+     *   Past   = N months before the date, through the date
+     *   Future = day after the date, through N months after the date
+     * e.g. quarterly, Mar 15, 2026 → Past: Dec 15, 2025 – Mar 15, 2026 / Future: Mar 16 – Jun 15, 2026
+     *      bi-monthly, Mar 15, 2026 → Past: Jan 15 – Mar 15, 2026 / Future: Mar 16 – May 15, 2026
      */
-    private function get_quarterly_ranges($post_id) {
+    private function get_anchor_ranges($post_id) {
+        $n = $this->get_window_months($post_id);
+        $type = $this->get_report_type($post_id);
         $anchor = get_post_meta($post_id, '_brm_anchor', true);
         $d = $anchor ? date_create_immutable($anchor) : false;
         if (!$d) return false;
@@ -449,7 +468,7 @@ class BimonthlyReportManager {
             $m = $d->modify('first day of this month')->modify(($months >= 0 ? '+' : '') . $months . ' months');
             return $m->setDate(intval($m->format('Y')), intval($m->format('n')), min($day, intval($m->format('t'))));
         };
-        $prior_start = $shift(-3); $ahead_end = $shift(3);
+        $prior_start = $shift(-$n); $ahead_end = $shift($n);
         $ahead_start = $d->modify('+1 day');
         $label = function($a, $b) {
             return ($a->format('Y') === $b->format('Y'))
@@ -457,10 +476,10 @@ class BimonthlyReportManager {
                 : $a->format('M j, Y') . ' – ' . $b->format('M j, Y');
         };
         return array(
-            'type'         => 'quarterly',
+            'type'         => $type,
             'anchor'       => $d->format('Y-m-d'),
             'period_key'   => '',
-            'period_label' => 'Quarterly – ' . $d->format('M j, Y'),
+            'period_label' => ($type === 'quarterly' ? 'Quarterly' : 'Bi-Monthly') . ' – ' . $d->format('M j, Y'),
             'year'         => intval($d->format('Y')),
             'prior_start'  => $prior_start->format('Y-m-d'),
             'prior_end'    => $d->format('Y-m-d'),
@@ -468,7 +487,7 @@ class BimonthlyReportManager {
             'ahead_start'  => $ahead_start->format('Y-m-d'),
             'ahead_end'    => $ahead_end->format('Y-m-d'),
             'ahead_label'  => $label($ahead_start, $ahead_end),
-            'span_label'   => 'Quarterly · ' . $d->format('M j, Y'),
+            'span_label'   => ($type === 'quarterly' ? 'Quarterly' : 'Bi-Monthly') . ' · ' . $d->format('M j, Y'),
         );
     }
 
@@ -513,7 +532,7 @@ class BimonthlyReportManager {
             }
             $list[] = array('id' => $p->ID, 'title' => $p->post_title, 'date' => get_the_date('m/d/Y', $p->ID),
                 'group' => !empty($groups) ? implode(', ', $groups) : '—',
-                'period' => $period_label, 'type' => $this->get_report_type($p->ID),
+                'period' => $period_label, 'type' => $this->get_report_type($p->ID), 'variant' => $this->get_report_variant($p->ID),
                 '_sort_val' => $sort_val, '_orig_index' => $index);
         }
 
@@ -540,19 +559,13 @@ class BimonthlyReportManager {
         $title  = sanitize_text_field($_POST['title']);
         $group  = intval($_POST['group']);
         $type   = (isset($_POST['report_type']) && $_POST['report_type'] === 'quarterly') ? 'quarterly' : 'bimonthly';
-        $period = isset($_POST['period']) ? sanitize_text_field($_POST['period']) : '';
-        $year   = isset($_POST['year']) ? intval($_POST['year']) : 0;
         $anchor = isset($_POST['anchor']) ? sanitize_text_field($_POST['anchor']) : '';
+        $variant = (isset($_POST['variant']) && $_POST['variant'] === 'supplemental') ? 'supplemental' : 'standard';
 
         if (empty($title)) wp_send_json_error('Title is required');
-        if ($type === 'quarterly') {
-            $ad = date_create_immutable($anchor);
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $anchor) || !$ad || intval($ad->format('Y')) < 2020 || intval($ad->format('Y')) > 2040) {
-                wp_send_json_error('Please select a valid date');
-            }
-        } else {
-            if (empty($period) || !isset(self::$periods[$period])) wp_send_json_error('Please select a reporting period');
-            if ($year < 2020 || $year > 2040) wp_send_json_error('Please select a valid year');
+        $ad = preg_match('/^\d{4}-\d{2}-\d{2}$/', $anchor) ? date_create_immutable($anchor) : false;
+        if (!$ad || intval($ad->format('Y')) < 2020 || intval($ad->format('Y')) > 2040) {
+            wp_send_json_error('Please select a valid date');
         }
         $title = $this->title_with_type($title, $type);
 
@@ -568,12 +581,8 @@ class BimonthlyReportManager {
         if ($group > 0) wp_set_object_terms($pid, array($group), 'group', false);
 
         update_post_meta($pid, '_brm_type', $type);
-        if ($type === 'quarterly') {
-            update_post_meta($pid, '_brm_anchor', $anchor);
-        } else {
-            update_post_meta($pid, '_brm_period', $period);
-            update_post_meta($pid, '_brm_year', $year);
-        }
+        update_post_meta($pid, '_brm_anchor', $anchor);
+        update_post_meta($pid, '_brm_variant', $variant);
 
         wp_send_json_success(array('id' => $pid));
     }
@@ -596,20 +605,15 @@ class BimonthlyReportManager {
     public function ajax_save_period() {
         check_ajax_referer('brm_nonce', 'nonce');
         $pid    = intval($_POST['post_id']);
-        $period = isset($_POST['period']) ? sanitize_text_field($_POST['period']) : '';
-        $year   = isset($_POST['year']) ? intval($_POST['year']) : 0;
         $anchor = isset($_POST['anchor']) ? sanitize_text_field($_POST['anchor']) : '';
         $type   = $this->get_report_type($pid);
         $title  = isset($_POST['title']) ? sanitize_text_field(wp_unslash($_POST['title'])) : '';
+        $variant = (isset($_POST['variant']) && $_POST['variant'] === 'supplemental') ? 'supplemental' : 'standard';
 
         if (!$this->user_can_access_bimonthly($pid)) wp_send_json_error('Insufficient permissions');
         if (get_post_type($pid) !== 'bimonthly') wp_send_json_error('Update not found');
-        if ($type === 'quarterly') {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $anchor) || !date_create_immutable($anchor)) wp_send_json_error('Invalid date');
-        } else {
-            if (empty($period) || !isset(self::$periods[$period])) wp_send_json_error('Invalid period');
-            if ($year < 2020 || $year > 2040) wp_send_json_error('Invalid year');
-        }
+        $ad = preg_match('/^\d{4}-\d{2}-\d{2}$/', $anchor) ? date_create_immutable($anchor) : false;
+        if (!$ad || intval($ad->format('Y')) < 2020 || intval($ad->format('Y')) > 2040) wp_send_json_error('Invalid date');
         if ($title !== '') $title = $this->title_with_type($title, $type);
 
         if ($title !== '' && $title !== get_the_title($pid)) {
@@ -617,12 +621,11 @@ class BimonthlyReportManager {
             if (is_wp_error($res)) wp_send_json_error('Failed to save title');
         }
 
-        if ($type === 'quarterly') {
-            update_post_meta($pid, '_brm_anchor', $anchor);
-        } else {
-            update_post_meta($pid, '_brm_period', $period);
-            update_post_meta($pid, '_brm_year', $year);
-        }
+        update_post_meta($pid, '_brm_anchor', $anchor);
+        update_post_meta($pid, '_brm_variant', $variant);
+        // A legacy period/year post converts to the date-anchored window on its first save.
+        delete_post_meta($pid, '_brm_period');
+        delete_post_meta($pid, '_brm_year');
 
         $ranges = $this->get_period_ranges($pid);
         wp_send_json_success(array('period' => $ranges, 'title' => get_the_title($pid)));
@@ -688,7 +691,7 @@ class BimonthlyReportManager {
         foreach ($groups as $g) $gdata[] = array('id' => $g->term_id, 'name' => $g->name);
 
         wp_send_json_success(array(
-            'id' => $post->ID, 'title' => $post->post_title, 'groups' => $gdata, 'type' => $this->get_report_type($pid),
+            'id' => $post->ID, 'title' => $post->post_title, 'groups' => $gdata, 'type' => $this->get_report_type($pid), 'variant' => $this->get_report_variant($pid),
             'period' => $this->get_period_ranges($pid),
             'prior_items' => $this->hydrate_items($prior),
             'ahead_items' => $this->hydrate_items($ahead),
@@ -1177,6 +1180,7 @@ class BimonthlyReportManager {
         $payload = array(
             'title' => $post->post_title, 'network_title' => get_bloginfo('name'),
             'report_type_label' => $this->get_report_type($post->ID) === 'quarterly' ? 'Quarterly' : 'Bi-Monthly',
+            'report_variant_label' => $this->get_report_variant($post->ID) === 'supplemental' ? 'Supplemental Report' : 'Standard Report',
             'group_name' => !empty($groups) ? $groups[0] : '',
             'is_admin' => current_user_can('edit_others_workplans'),
             'prior_items' => $this->hydrate_items($prior), 'ahead_items' => $this->hydrate_items($ahead),
@@ -1196,7 +1200,8 @@ class BimonthlyReportManager {
         $r = array();
         foreach ($posts as $p) {
             $g = wp_get_post_terms($p->ID, 'group', array('fields' => 'names'));
-            $r[] = array('id' => $p->ID, 'title' => $p->post_title, 'group' => !empty($g) ? $g[0] : '—', 'region' => $this->get_region_for_post($p->ID), 'date' => get_the_date('m/d/Y', $p->ID));
+            $r[] = array('id' => $p->ID, 'title' => $p->post_title, 'group' => !empty($g) ? $g[0] : '—', 'region' => $this->get_region_for_post($p->ID), 'date' => get_the_date('m/d/Y', $p->ID),
+                'type' => $this->get_report_type($p->ID), 'variant' => $this->get_report_variant($p->ID));
         }
         wp_send_json_success($r);
     }
